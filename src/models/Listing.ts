@@ -11,7 +11,12 @@ const listingSchema = new mongoose.Schema(
     country: { type: String, required: true },
     roommates: [{ type: String }], // Changed from String to Array of Strings
     tags: [{ type: String }],
-    availability: [{ type: String }], // ISO date strings like "2025-06-25"
+    availability: [
+      {
+        startDate: { type: Date, required: true }, // Use Date type for actual dates
+        endDate: { type: Date, required: true },   // Use Date type for actual dates
+      },
+    ],
     images: [{ type: String }],
     thumbnail: { type: String },
     status: { type: String, enum: ['draft', 'published'], default: 'draft' }
