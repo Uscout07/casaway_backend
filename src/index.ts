@@ -35,6 +35,7 @@ const corsOptions = {
   origin: [
     'http://localhost:3000',
     'http://localhost:3001',
+    'https://casaway.vercel.app/'
     // Add your production frontend URL here
   ],
   credentials: true,
