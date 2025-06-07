@@ -1,39 +1,37 @@
-import mongoose, { Document, Schema } from "mongoose";
+import mongoose, { Document, Schema, Types } from "mongoose";
 
 export interface IUser extends Document {
+  _id: Types.ObjectId; // Explicitly define _id from mongoose.Document
   name: string;
-   username: { type: String, required: true }, // Added separate username field
+  username: string; // Corrected: should be string, not { type: String, ... }
   email: string;
   bio: string;
   password: string;
-  profilePic?: string;
-  phone?: string;
-  city?: string; // Added city field
-  country?: string; // Added country field
+  profilePic?: string; // Optional string
+  phone?: string;     // Optional string
+  city?: string;      // Optional string
+  country?: string;   // Optional string
   role: "user" | "admin";
-  chats: mongoose.Types.ObjectId[];
+  chats: Types.ObjectId[]; // Use Types.ObjectId for array of ObjectIds
   createdAt: Date;
   updatedAt: Date;
-  followers: mongoose.Types.ObjectId[];
-  following: mongoose.Types.ObjectId[];
-  isProfileComplete?: boolean;
-  instagramUrl: {
-  type: String,
-  required: false,
-}
+  followers: Types.ObjectId[]; // Use Types.ObjectId
+  following: Types.ObjectId[]; // Use Types.ObjectId
+  isProfileComplete?: boolean; // Optional boolean
+  instagramUrl?: string; // Corrected: should be string | undefined, not { type: String, ... }
 }
 
 const userSchema = new Schema<IUser>(
   {
     name: { type: String, required: false },
-    username: { type: String, required: true, unique: true }, // Separate username field
+    username: { type: String, required: true, unique: true },
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     bio: { type: String, default: "" },
     profilePic: { type: String, default: "" },
     phone: { type: String },
-    city: { type: String }, // Optional city
-    country: { type: String }, // Optional country
+    city: { type: String },
+    country: { type: String },
     role: { type: String, enum: ["user", "admin"], default: "user" },
     chats: [{ type: mongoose.Schema.Types.ObjectId, ref: "Chat" }],
     followers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],

@@ -1,72 +1,82 @@
 // src/routes/messageRoutes.ts
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import { authenticateToken } from '../middleware/auth';
 import Message from '../models/Message';
-import Chat from '../models/Chat'; // Import Chat model to update lastMessage
+import Chat from '../models/Chat';
+import asyncHandler from '../utils/asyncHandler';
+import mongoose from 'mongoose'; // Import mongoose to access ObjectId type
 
 const router = express.Router();
 
-// GET messages for a specific chat
-router.get('/:chatId', authenticateToken, async (req, res) => {
-    try {
-        const { chatId } = req.params;
-        const messages = await Message.find({ chat: chatId })
-            .populate('sender', 'name profilePic') // Populate sender's name and profilePic
-            .sort({ createdAt: 1 }); // Sort by creation date ascending
-
-        res.status(200).json(messages);
-    } catch (error) {
-        console.error('Error fetching messages:', error);
-        res.status(500).json({ msg: 'Internal Server Error', error: error });
+// Extend Request to include userId from authenticateToken middleware
+declare module 'express-serve-static-core' {
+    interface Request {
+        userId?: string;
     }
-});
+}
+
+// Helper for error messages (optional, but good practice if not using a centralized error handler)
+function getErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+        return error.message;
+    }
+    if (typeof error === 'object' && error !== null && 'message' in error) {
+        return String((error as { message: unknown }).message);
+    }
+    return String(error);
+}
+
+// GET messages for a specific chat
+router.get('/:chatId', authenticateToken, asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const { chatId } = req.params;
+    const messages = await Message.find({ chat: chatId })
+        .populate('sender', 'name profilePic')
+        .sort({ createdAt: 1 });
+
+    res.status(200).json(messages);
+}));
 
 // NEW ENDPOINT: POST a new message to a chat
-router.post('/', authenticateToken, async (req, res) => {
-    const { chatId, content } = req.body; // Expect chatId and content from the request body
-    const senderId = req.userId; // Get sender ID from the authenticated token
+router.post('/', authenticateToken, asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const { chatId, content } = req.body;
+    const senderId = req.userId;
+
+    if (!senderId) {
+        res.status(401).json({ msg: 'User not authenticated.' });
+        return;
+    }
 
     if (!chatId || !content) {
-        return res.status(400).json({ msg: 'Chat ID and content are required.' });
+        res.status(400).json({ msg: 'Chat ID and content are required.' });
+        return;
     }
 
-    try {
-        // 1. Find the chat to ensure it exists and the sender is a member
-        const chat = await Chat.findById(chatId);
-        if (!chat) {
-            return res.status(404).json({ msg: 'Chat not found.' });
-        }
-
-        // Security check: Ensure the sender is actually a member of this chat
-        if (!chat.members.some(member => member.toString() === senderId)) {
-            return res.status(403).json({ msg: 'Unauthorized: You are not a member of this chat.' });
-        }
-
-        // 2. Create the new message
-        const newMessage = await Message.create({
-            chat: chatId,
-            sender: senderId,
-            content: content,
-            readBy: [senderId] // Sender has read their own message
-        });
-
-        // 3. Update the chat's lastMessage field
-        chat.lastMessage = newMessage._id;
-        await chat.save();
-
-        // 4. Populate the sender information for the response (important for frontend UI)
-        const populatedMessage = await Message.findById(newMessage._id)
-                                            .populate('sender', 'name profilePic');
-
-        // Optional: Emit message via Socket.IO if you set it up
-        // req.app.get('io').to(chatId).emit('messageReceived', populatedMessage);
-
-        res.status(201).json(populatedMessage); // Return the newly created message with sender populated
-
-    } catch (error) {
-        console.error('Error sending message:', error);
-        res.status(500).json({ msg: 'Internal Server Error', error: error });
+    const chat = await Chat.findById(chatId);
+    if (!chat) {
+        res.status(404).json({ msg: 'Chat not found.' });
+        return;
     }
-});
+
+    if (!chat.members.some(member => member.toString() === senderId)) {
+        res.status(403).json({ msg: 'Unauthorized: You are not a member of this chat.' });
+        return;
+    }
+
+    const newMessage = await Message.create({
+        chat: chatId,
+        sender: senderId,
+        content: content,
+        readBy: [senderId]
+    });
+
+    // Fix for TS2322: Explicitly cast newMessage._id to mongoose.Types.ObjectId
+    chat.lastMessage = newMessage._id as mongoose.Types.ObjectId;
+    await chat.save();
+
+    const populatedMessage = await Message.findById(newMessage._id)
+                                        .populate('sender', 'name profilePic');
+
+    res.status(201).json(populatedMessage);
+}));
 
 export default router;

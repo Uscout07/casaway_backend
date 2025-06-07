@@ -1,29 +1,50 @@
+// src/routes/commentRoutes.ts
+
 import express, { Request, Response } from 'express';
 import Comment from "../models/Comment";
 import Post from '../models/Post';
 import Listing from '../models/Listing';
 import { authenticateToken } from '../middleware/auth';
 import mongoose from 'mongoose';
-import { IUser } from '../models/User'; // Adjust the path if needed
+import { IUser } from '../models/User'; // Still need IUser for other contexts if used
+import asyncHandler from '../utils/asyncHandler';
 
 const router = express.Router();
 
-interface AuthenticatedRequest extends Request {
-    userId?: string;
+// Define an interface for the user object after specific population
+export interface IPopulatedUserForComment {
+    _id: mongoose.Types.ObjectId;
+    username: string;
+    profilePic?: string;
+    name?: string;
 }
 
-// Add a comment to a Post (Updated to match your frontend expectations)
-router.post('/:postId', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+// Also, let's refine the type of the 'user' field in Comment to be more specific after population
+// You might need to adjust your Comment model's interface if it's currently just `user: ObjectId`
+// For now, we'll cast directly in the route, but a more robust solution might involve extending the Comment document.
+
+
+// Add a comment to a Post
+router.post('/:postId', authenticateToken, asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as any).userId; // Or just req.userId if your global declaration works
     try {
         const { postId } = req.params;
         const { content, parentCommentId } = req.body;
-        const userId = req.userId;
 
-        if (!userId) return res.status(401).json({ msg: 'User not authenticated' });
-        if (!content) return res.status(400).json({ msg: 'Comment content is required' });
+        if (!userId) {
+            res.status(401).json({ msg: 'User not authenticated' });
+            return;
+        }
+        if (!content) {
+            res.status(400).json({ msg: 'Comment content is required' });
+            return;
+        }
 
         const post = await Post.findById(postId);
-        if (!post) return res.status(404).json({ msg: 'Post not found' });
+        if (!post) {
+            res.status(404).json({ msg: 'Post not found' });
+            return;
+        }
 
         const newComment = await Comment.create({
             user: userId,
@@ -32,9 +53,10 @@ router.post('/:postId', authenticateToken, async (req: AuthenticatedRequest, res
             parentComment: parentCommentId || null,
         });
 
-        const populatedComment = await newComment.populate('user', 'username profilePic name');
+        // The key change here: Cast to IPopulatedUserForComment
+        const populatedComment = await newComment.populate<{ user: IPopulatedUserForComment }>('user', 'username profilePic name');
         
-        // Transform to match your frontend interface
+        // Now, TypeScript knows the structure of populatedComment.user
         const transformedComment = {
             _id: populatedComment._id,
             user: {
@@ -47,7 +69,7 @@ router.post('/:postId', authenticateToken, async (req: AuthenticatedRequest, res
             content: populatedComment.text,
             parentCommentId: populatedComment.parentComment,
             createdAt: populatedComment.createdAt,
-            replies: [] // Initialize empty replies array for new comments
+            replies: []
         };
 
         res.status(201).json(transformedComment);
@@ -55,42 +77,53 @@ router.post('/:postId', authenticateToken, async (req: AuthenticatedRequest, res
         console.error('Error adding comment to post:', err);
         res.status(500).json({ msg: 'Server error' });
     }
-});
+}));
 
 // Get comments for a Post using Instagram-style nesting
-router.get('/:postId', async (req: Request, res: Response) => {
+router.get('/:postId', asyncHandler(async (req: Request, res: Response) => {
     try {
         const { postId } = req.params;
 
-        // Validate postId
         if (!mongoose.Types.ObjectId.isValid(postId)) {
-            return res.status(400).json({ msg: 'Invalid post ID' });
+            res.status(400).json({ msg: 'Invalid post ID' });
+            return;
         }
 
-        // Get all comments for the post
+        // Use a type argument for populate to inform TypeScript
         const allComments = await Comment.find({ post: postId })
-            .populate('user', 'username profilePic name')
-            .populate('mentionedUsers', 'username')
+            .populate<{ user: IPopulatedUserForComment }>('user', 'username profilePic name')
+            .populate('mentionedUsers', 'username') // Assuming mentionedUsers are also populated with selected fields
             .sort({ createdAt: 1 })
             .lean();
 
-        const commentMap = new Map();
-        const topLevelComments = [];
+        // Let's refine the type for comments in the map and arrays
+        interface ICommentWithReplies extends Document { // You might need to extend your base IComment if it exists
+            _id: mongoose.Types.ObjectId;
+            user: IPopulatedUserForComment;
+            post: mongoose.Types.ObjectId;
+            text: string;
+            parentComment?: mongoose.Types.ObjectId;
+            createdAt: Date;
+            replies: ICommentWithReplies[]; // Recursive type
+            // Add other fields you fetch if needed
+        }
 
-        // First pass: populate commentMap and initialize replies array
-        allComments.forEach((comment) => {
-            comment.replies = [];
-            commentMap.set(comment._id.toString(), comment);
+        const commentMap = new Map<string, ICommentWithReplies>();
+        const topLevelComments: ICommentWithReplies[] = [];
+
+        allComments.forEach((comment: any) => { // 'any' for now, better to cast allComments elements directly from populate
+            // Cast to ICommentWithReplies to safely add replies
+            const processedComment: ICommentWithReplies = { ...comment, replies: [] };
+            commentMap.set(processedComment._id.toString(), processedComment);
         });
 
-        // Second pass: Organize into Instagram-style 2-level hierarchy
-        allComments.forEach((comment) => {
+        allComments.forEach((comment: any) => { // 'any' for now
             const parentId = comment.parentComment?.toString();
+            const currentComment = commentMap.get(comment._id.toString()); // Get the already-typed comment from map
 
             if (parentId && commentMap.has(parentId)) {
                 let actualParent = commentMap.get(parentId);
 
-                // If the direct parent is itself a reply, find its main parent
                 if (actualParent && actualParent.parentComment) {
                     const grandparentId = actualParent.parentComment.toString();
                     if (commentMap.has(grandparentId)) {
@@ -98,25 +131,23 @@ router.get('/:postId', async (req: Request, res: Response) => {
                     }
                 }
 
-                // Add to the main parent's replies
-                if (actualParent) {
-                    actualParent.replies.push(commentMap.get(comment._id.toString()));
+                if (actualParent && currentComment) {
+                    actualParent.replies.push(currentComment);
                 }
             } else {
-                // This is a top-level comment
-                topLevelComments.push(commentMap.get(comment._id.toString()));
+                if (currentComment) {
+                    topLevelComments.push(currentComment);
+                }
             }
         });
 
-        // Sort replies by creation date (oldest first)
-        topLevelComments.forEach((comment) => {
+        topLevelComments.forEach((comment: ICommentWithReplies) => { // Typed comment
             if (comment.replies && comment.replies.length > 0) {
-                comment.replies.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+                comment.replies.sort((a: ICommentWithReplies, b: ICommentWithReplies) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
             }
         });
 
-        // Transform to match your frontend interface
-        const transformedComments = topLevelComments.map(comment => ({
+        const transformedComments = topLevelComments.map((comment: ICommentWithReplies) => ({
             _id: comment._id,
             user: {
                 _id: comment.user._id,
@@ -124,11 +155,11 @@ router.get('/:postId', async (req: Request, res: Response) => {
                 profilePic: comment.user.profilePic,
                 name: comment.user.name
             },
-            postId: postId,
-            content: comment.text,
+            postId: postId, // Assuming 'post' field from Comment model
+            content: comment.text, // Assuming 'text' field from Comment model
             parentCommentId: comment.parentComment,
             createdAt: comment.createdAt,
-            replies: comment.replies?.map(reply => ({
+            replies: comment.replies?.map((reply: ICommentWithReplies) => ({
                 _id: reply._id,
                 user: {
                     _id: reply.user._id,
@@ -148,25 +179,34 @@ router.get('/:postId', async (req: Request, res: Response) => {
         console.error('Error fetching comments for post:', err);
         res.status(500).json({ msg: 'Failed to fetch comments' });
     }
-});
+}));
 
 // Add a comment to a Listing (keeping existing functionality)
-router.post('/listing/:listingId', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/listing/:listingId', authenticateToken, asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as any).userId;
     try {
         const { listingId } = req.params;
         const { text, parentCommentId } = req.body;
-        const userId = req.userId;
 
-        if (!userId) return res.status(401).json({ msg: 'User not authenticated' });
-        if (!text) return res.status(400).json({ msg: 'Comment text is required' });
+        if (!userId) {
+            res.status(401).json({ msg: 'User not authenticated' });
+            return;
+        }
+        if (!text) {
+            res.status(400).json({ msg: 'Comment text is required' });
+            return;
+        }
 
-        // Validate listingId
         if (!mongoose.Types.ObjectId.isValid(listingId)) {
-            return res.status(400).json({ msg: 'Invalid listing ID' });
+            res.status(400).json({ msg: 'Invalid listing ID' });
+            return;
         }
 
         const listing = await Listing.findById(listingId);
-        if (!listing) return res.status(404).json({ msg: 'Listing not found' });
+        if (!listing) {
+            res.status(404).json({ msg: 'Listing not found' });
+            return;
+        }
 
         const newComment = await Comment.create({
             user: userId,
@@ -175,47 +215,56 @@ router.post('/listing/:listingId', authenticateToken, async (req: AuthenticatedR
             parentComment: parentCommentId || null,
         });
 
-        const populatedComment = await newComment.populate('user', 'username profilePic name');
-        res.status(201).json(populatedComment);
+        // The key change here: Cast to IPopulatedUserForComment
+        const populatedComment = await newComment.populate<{ user: IPopulatedUserForComment }>('user', 'username profilePic name');
+        res.status(201).json(populatedComment); // populatedComment.user will now be of type IPopulatedUserForComment
     } catch (err) {
         console.error('Error adding comment to listing:', err);
         res.status(500).json({ msg: 'Server error' });
     }
-});
+}));
 
 // Get comments for a Listing (using the existing static method)
-router.get('/listing/:listingId', async (req: Request, res: Response) => {
+router.get('/listing/:listingId', asyncHandler(async (req: Request, res: Response) => {
     try {
         const { listingId } = req.params;
         
-        // Validate listingId
         if (!mongoose.Types.ObjectId.isValid(listingId)) {
-            return res.status(400).json({ msg: 'Invalid listing ID' });
+            res.status(400).json({ msg: 'Invalid listing ID' });
+            return;
         }
 
+        // Assuming Comment.getInstagramStyleComments returns a structure that matches your needs
+        // If it also populates user, you might need to adjust its return type.
         const comments = await Comment.getInstagramStyleComments(listingId);
         res.json(comments);
     } catch (err) {
         console.error('Error fetching comments for listing:', err);
         res.status(500).json({ msg: 'Failed to fetch comments' });
     }
-});
+}));
 
 // Toggle Like on a Comment
-router.post('/toggle-like/:commentId', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/toggle-like/:commentId', authenticateToken, asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as any).userId;
     try {
         const { commentId } = req.params;
-        const userId = req.userId;
 
-        if (!userId) return res.status(401).json({ msg: 'User not authenticated' });
+        if (!userId) {
+            res.status(401).json({ msg: 'User not authenticated' });
+            return;
+        }
 
-        // Validate commentId
         if (!mongoose.Types.ObjectId.isValid(commentId)) {
-            return res.status(400).json({ msg: 'Invalid comment ID' });
+            res.status(400).json({ msg: 'Invalid comment ID' });
+            return;
         }
 
         const comment = await Comment.findById(commentId);
-        if (!comment) return res.status(404).json({ msg: 'Comment not found' });
+        if (!comment) {
+            res.status(404).json({ msg: 'Comment not found' });
+            return;
+        }
 
         const userIdString = userId.toString();
         const isLiked = comment.likes.some(id => id.toString() === userIdString);
@@ -223,38 +272,42 @@ router.post('/toggle-like/:commentId', authenticateToken, async (req: Authentica
         if (isLiked) {
             comment.likes = comment.likes.filter(id => id.toString() !== userIdString) as mongoose.Types.ObjectId[];
             await comment.save();
-            return res.status(200).json({ liked: false, likesCount: comment.likes.length, msg: 'Comment unliked' });
+            res.status(200).json({ liked: false, likesCount: comment.likes.length, msg: 'Comment unliked' });
+            return;
         } else {
             comment.likes.push(new mongoose.Types.ObjectId(userId));
             await comment.save();
-            return res.status(200).json({ liked: true, likesCount: comment.likes.length, msg: 'Comment liked' });
+            res.status(200).json({ liked: true, likesCount: comment.likes.length, msg: 'Comment liked' });
+            return;
         }
     } catch (err) {
         console.error('Error toggling comment like:', err);
         res.status(500).json({ msg: 'Server error' });
     }
-});
+}));
 
 // Get like count for a comment
-router.get('/likes/:commentId', async (req: Request, res: Response) => {
+router.get('/likes/:commentId', asyncHandler(async (req: Request, res: Response) => {
     try {
         const { commentId } = req.params;
         
-        // Validate commentId
         if (!mongoose.Types.ObjectId.isValid(commentId)) {
-            return res.status(400).json({ msg: 'Invalid comment ID' });
+            res.status(400).json({ msg: 'Invalid comment ID' });
+            return;
         }
 
         const comment = await Comment.findById(commentId).select('likes');
-        if (!comment) return res.status(404).json({ msg: 'Comment not found' });
+        if (!comment) {
+            res.status(404).json({ msg: 'Comment not found.' });
+            return;
+        }
 
         res.json({ count: comment.likes.length });
     } catch (err) {
         console.error('Error fetching comment like count:', err);
         res.status(500).json({ msg: 'Server error' });
     }
-});
-
+}));
 
 
 export default router;
