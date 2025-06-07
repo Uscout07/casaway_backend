@@ -172,19 +172,22 @@ function organizeCommentsInstagramStyle(allComments: IComment[]): IComment[] {
         if (!comment.replies) {
             comment.replies = [];
         }
-        commentMap.set(comment._id.toString(), comment);
+        // Explicitly cast comment._id to Types.ObjectId
+        commentMap.set((comment._id as Types.ObjectId).toString(), comment);
     });
 
     // Second pass: Organize into a 2-level hierarchy (Instagram-style)
     allComments.forEach((comment: IComment) => {
-        const parentId = comment.parentComment?.toString();
+        // Explicitly cast comment.parentComment to Types.ObjectId before toString()
+        const parentId = comment.parentComment ? (comment.parentComment as Types.ObjectId).toString() : undefined;
 
         if (parentId && commentMap.has(parentId)) {
             let actualParent: IComment | undefined = commentMap.get(parentId);
 
             // If the direct parent is itself a reply, find its main parent
             if (actualParent && actualParent.parentComment) {
-                const grandparentId = actualParent.parentComment.toString();
+                // Explicitly cast actualParent.parentComment to Types.ObjectId
+                const grandparentId = (actualParent.parentComment as Types.ObjectId).toString();
                 if (commentMap.has(grandparentId)) {
                     actualParent = commentMap.get(grandparentId);
                 }
@@ -192,11 +195,13 @@ function organizeCommentsInstagramStyle(allComments: IComment[]): IComment[] {
 
             // Add the current comment to the replies array of its resolved main parent
             if (actualParent) {
-                actualParent.replies!.push(commentMap.get(comment._id.toString())!);
+                // Explicitly cast comment._id to Types.ObjectId
+                actualParent.replies!.push(commentMap.get((comment._id as Types.ObjectId).toString())!);
             }
         } else {
             // This is a top-level comment
-            topLevelComments.push(commentMap.get(comment._id.toString())!);
+            // Explicitly cast comment._id to Types.ObjectId
+            topLevelComments.push(commentMap.get((comment._id as Types.ObjectId).toString())!);
         }
     });
 
@@ -210,7 +215,7 @@ function organizeCommentsInstagramStyle(allComments: IComment[]): IComment[] {
     });
 
     // Sort top-level comments (newest first)
-    topLevelComments.sort((a: IComment, b: IComment) => 
+    topLevelComments.sort((a: IComment, b: IComment) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
 

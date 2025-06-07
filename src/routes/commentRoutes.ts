@@ -1,10 +1,10 @@
-// routes/commentRoutes.ts
 import express, { Request, Response } from 'express';
 import Comment from "../models/Comment";
 import Post from '../models/Post';
 import Listing from '../models/Listing';
 import { authenticateToken } from '../middleware/auth';
 import mongoose from 'mongoose';
+import { IUser } from '../models/User'; // Adjust the path if needed
 
 const router = express.Router();
 
