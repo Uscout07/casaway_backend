@@ -28,10 +28,7 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
   }
 
   try {
-    // FIX HERE: Change the decoded type to match what's in the token
     const decoded = jwt.verify(token, JWT_SECRET) as { id: string, iat: number, exp: number };
-
-    // FIX HERE: Assign decoded.id to req.userId
     req.userId = decoded.id; // Correctly extract 'id' from the decoded token
     console.log(`[AUTH_MIDDLEWARE] Token validated for userId: ${req.userId}`);
     next();

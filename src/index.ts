@@ -17,8 +17,7 @@ import followRoutes from './routes/followRoutes';
 import likeRoutes from './routes/likeRoutes';
 import commentRoutes from './routes/commentRoutes';
 import savedPostRoutes from './routes/savedPostRoutes';
-
-
+import storyRoutes from './routes/storyRoutes'; 
 
 
 // Import Chat model directly at the top for consistency
@@ -177,6 +176,7 @@ app.use('/api/follow', followRoutes);
 app.use('/api/likes', likeRoutes);
 app.use('/api/comments', commentRoutes);
 app.use('/api/saved-posts', savedPostRoutes);
+app.use('/api/stories', storyRoutes);
 console.log('[BACKEND] All API routes mounted.');
 
 
