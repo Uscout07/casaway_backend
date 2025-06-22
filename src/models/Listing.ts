@@ -7,10 +7,12 @@ const listingSchema = new mongoose.Schema(
     details: { type: String, required: true },
     type: { type: String, enum: ['Single Room', 'Whole Apartment', 'Whole House'], required: true },
     amenities: [{ type: String }],
+    petTypes: [{type: String}],
     city: { type: String, required: true },
     country: { type: String, required: true },
     roommates: [{ type: String }], // Changed from String to Array of Strings
     tags: [{ type: String }],
+    features: [{type: String}],
     availability: [
       {
         startDate: { type: Date, required: true }, // Use Date type for actual dates
