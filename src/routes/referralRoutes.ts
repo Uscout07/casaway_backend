@@ -18,7 +18,7 @@ router.get('/:userId', asyncHandler(async (req: Request, res: Response): Promise
 
     res.json({
       referralCode: user.referralCode,
-      referralLink: `https://casaway.vercel.app/signup?ref=${user.referralCode}`,
+      referralLink: `https://casaway.vercel.app/auth?ref=${user.referralCode}`,
       points: user.points || 0,
       referralCount,
     });
