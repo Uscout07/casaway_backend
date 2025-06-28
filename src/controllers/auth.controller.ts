@@ -8,7 +8,7 @@ import User from '../models/User'; // Adjust path as needed for your User model
 // are executed, by which time dotenv.config() in index.ts will have run.
 
 export const registerUser = async (req: Request, res: Response) => {
-  const { username, email, password } = req.body;
+  const { name, username, email, password } = req.body;
   console.log("[AUTH_CONTROLLER] Register attempt for:", { email, username });
 
   if (!username || !email || !password) {
@@ -31,9 +31,11 @@ export const registerUser = async (req: Request, res: Response) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = await User.create({
+      name,
       username,
       email,
       password: hashedPassword,
+      referralCode: username.toLowerCase() + Math.floor(1000 + Math.random() * 9000)
     });
 
     console.log("[AUTH_CONTROLLER] User created in DB:", user.email);

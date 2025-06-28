@@ -4,6 +4,8 @@ import User from '../models/User';
 import { authenticateToken } from '../middleware/auth';
 import asyncHandler from '../utils/asyncHandler'; // Import asyncHandler
 import mongoose from 'mongoose'; // For ObjectId validation
+import Listing from '../models/Listing';
+import Post from '../models/Post';
 
 const router = express.Router();
 
@@ -268,24 +270,27 @@ router.delete('/delete', authenticateToken, asyncHandler(async (req: Authenticat
         return;
     }
 
-    // Consider adding a confirmation step or password verification here for security.
+    // A crucial security step: Consider adding a password verification check here before deletion.
+    // For example, you could require the user to send their password in the request body.
 
-    // Delete user
+    // 1. Delete the user
     const deletedUser = await User.findByIdAndDelete(userId);
     if (!deletedUser) {
         res.status(404).json({ msg: 'User not found.' });
         return;
     }
 
-    // Delete user's associated data (uncomment when models are available and imported)
-    // Example:
+    // 2. Delete the user's associated data to maintain data integrity.
+    // Make sure to import these models at the top of your file.
     // import Post from '../models/Post';
     // import Comment from '../models/Comment';
     // import Listing from '../models/Listing';
-    // await Post.deleteMany({ user: userId });
-    // await Comment.deleteMany({ user: userId });
-    // await Listing.deleteMany({ user: userId });
 
+    await Listing.deleteMany({ user: userId }); // Assuming 'user' is the field linking a listing to a user
+    await Post.deleteMany({ user: userId });     // Assuming 'user' is the field linking a post to a user
+    // Add other models as needed, e.g., comments, messages, etc.
+
+    // 3. Send a success response.
     res.status(200).json({ message: 'User and associated data deleted successfully.' });
 }));
 
