@@ -20,6 +20,8 @@ import savedPostRoutes from './routes/savedPostRoutes';
 import storyRoutes from './routes/storyRoutes'; 
 import referralRoutes from './routes/referralRoutes';
 import redeemRoutes from './routes/redeemRoutes';
+import rewardRoutes from './routes/rewardRoutes';
+import bodyParser from 'body-parser';
 
 
 // Import Chat model directly at the top for consistency
@@ -164,8 +166,14 @@ app.set('io', io);
 console.log('[BACKEND] Socket.IO instance set on app.');
 
 app.use(cookieParser());
-app.use(express.json());
-console.log('[BACKEND] Middleware: cookieParser and express.json enabled.');
+// FIX: Configure express.json() to handle larger payloads for image uploads
+app.use(express.json({ limit: '50mb' })); // Increased limit to 50MB
+// If you also handle form data with URL-encoded payloads, you might want to increase that limit too:
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+console.log('[BACKEND] Middleware: cookieParser and express.json (with 50MB limit) enabled.');
+
+// app.use(bodyParser.json({ limit: '10mb' }));
+// app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 
 
 // Routes
@@ -183,6 +191,7 @@ app.use('/api/saved-posts', savedPostRoutes);
 app.use('/api/stories', storyRoutes);
 app.use('/api/referral', referralRoutes);
 app.use('/api/redeem', redeemRoutes);
+app.use('/api/rewards', rewardRoutes);
 console.log('[BACKEND] All API routes mounted.');
 
 

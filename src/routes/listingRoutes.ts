@@ -72,38 +72,74 @@ router.get('/autocomplete/countries', asyncHandler(async (req: Request, res: Res
 
 // 3) CREATE LISTING
 router.post('/', authenticateToken, asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const userId = req.userId;
+    console.log('=== CREATE LISTING endpoint hit ===');
+    console.log('Headers:', req.headers);
+    console.log('Raw Request Body:', req.body); // Log the incoming body
+
     const {
         title, details, type, amenities, city, country,
-        roommates, tags, availability, images, status, thumbnail
+        roommates, tags, availability, images, status, thumbnail, features, petTypes
     } = req.body;
+    const userId = req.userId; // Assuming authenticateToken sets req.userId
 
     // Basic validation
     if (!userId) {
         res.status(401).json({ msg: 'User not authenticated' });
-        return; // Early exit
+        return;
     }
-    if (!title || !details || !type || !city || !country) {
-        res.status(400).json({ msg: 'Missing required listing fields.' });
-        return; // Early exit
+    if (!title || !details || !type || !city || !country || !images || images.length === 0 || !thumbnail) {
+        res.status(400).json({ msg: 'Missing required listing fields (title, details, type, city, country, images, thumbnail).' });
+        return;
     }
 
-    const listing = await Listing.create({
-        user: userId, // Use userId from authenticated token
+    // --- Correctly format availability array for Mongoose ---
+    const formattedAvailability = Array.isArray(availability)
+        ? availability.map((dateString: string) => {
+            // Ensure dateString is valid before creating Date object
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) {
+                throw new Error(`Invalid date format for availability: ${dateString}`);
+            }
+            return {
+                startDate: date,
+                endDate: date,
+            };
+        })
+        : [];
+
+    // --- Debugging Logs for Availability (Now correctly placed) ---
+    console.log('*** Debugging Availability: ***');
+    console.log('Original availability from request body:', availability);
+    console.log('Type of original availability:', typeof availability, Array.isArray(availability) ? ' (is Array)' : ' (is NOT Array)');
+    console.log('Content of formattedAvailability before Listing.create:', formattedAvailability);
+    console.log('Type of formattedAvailability:', typeof formattedAvailability, Array.isArray(formattedAvailability) ? ' (is Array)' : ' (is NOT Array)');
+    if (Array.isArray(formattedAvailability) && formattedAvailability.length > 0) {
+        console.log('First element of formattedAvailability:', formattedAvailability[0]);
+        console.log('Type of startDate in first element:', typeof formattedAvailability[0].startDate);
+    }
+    console.log('***************************');
+    // --- End Debugging Logs ---
+
+    // --- Create the listing with correctly formatted data ---
+    const newListing = await Listing.create({
+        user: userId,
         title,
         details,
         type,
-        amenities,
+        amenities: amenities || [], // Ensure defaults for optional arrays
+        features: features || [],
         city,
         country,
-        roommates,
-        tags,
-        availability,
+        roommates: roommates || [],
+        tags: tags || [],
+        availability: formattedAvailability, // <--- This is the crucial fix
         images,
-        status,
         thumbnail,
+        status,
+        petTypes: petTypes || [],
     });
-    res.status(201).json(listing); // No return here
+
+    res.status(201).json(newListing); // Send response once after successful creation
 }));
 
 // 4) GET ALL LISTINGS WITH FILTERS
