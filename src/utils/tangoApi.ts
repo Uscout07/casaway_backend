@@ -1,4 +1,8 @@
+// src/utils/tangoApi.ts
+import NodeCache from 'node-cache';
 import axios from 'axios';
+
+const cache = new NodeCache({ stdTTL: 1800 }); // cache for 30 mins
 
 const getEnvVars = () => ({
   TANGO_BASE_URL: process.env.TANGO_BASE_URL!,
@@ -28,11 +32,22 @@ interface TangoCatalog {
 }
 
 export const fetchCatalog = async (): Promise<TangoCatalog> => {
+  const cachedCatalog = cache.get<TangoCatalog>('tangoCatalog');
+  if (cachedCatalog) {
+    console.log('[TANGO] Returning cached catalog');
+    return cachedCatalog;
+  }
+
   const { TANGO_BASE_URL } = getEnvVars();
   const AUTH_HEADER = getAuthHeader();
 
   const res = await axios.get(`${TANGO_BASE_URL}/catalogs`, { headers: AUTH_HEADER });
-  return res.data as TangoCatalog;
+
+  const catalog = res.data as TangoCatalog;
+  cache.set('tangoCatalog', catalog);
+  console.log('[TANGO] Fetched new catalog and cached it');
+
+  return catalog;
 };
 
 export const placeOrder = async ({
