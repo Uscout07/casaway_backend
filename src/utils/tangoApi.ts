@@ -41,14 +41,18 @@ export const fetchCatalog = async (): Promise<TangoCatalog> => {
   const { TANGO_BASE_URL } = getEnvVars();
   const AUTH_HEADER = getAuthHeader();
 
-  const res = await axios.get(`${TANGO_BASE_URL}/catalogs`, { headers: AUTH_HEADER });
-
-  const catalog = res.data as TangoCatalog;
-  cache.set('tangoCatalog', catalog);
-  console.log('[TANGO] Fetched new catalog and cached it');
-
-  return catalog;
+  try {
+    const res = await axios.get(`${TANGO_BASE_URL}/catalogs`, { headers: AUTH_HEADER });
+    const catalog = res.data as TangoCatalog;
+    cache.set('tangoCatalog', catalog);
+    console.log('[TANGO] Fetched new catalog and cached it');
+    return catalog;
+  } catch (err: any) {
+    console.error('[TANGO] Failed to fetch catalog:', err?.response?.data || err.message || err);
+    throw new Error('Failed to fetch catalog from Tango API');
+  }
 };
+
 
 export const placeOrder = async ({
   email,
