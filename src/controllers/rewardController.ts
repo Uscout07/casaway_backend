@@ -6,17 +6,16 @@ import User from '../models/User';
 export const getRewardCatalog = async (req: Request, res: Response): Promise<void> => {
   try {
     console.log('[REWARD] Fetching filtered reward catalog...');
-    const fullCatalog = await fetchCatalog();
+    const fullCatalog = await fetchCatalog(); // Will now log failure inside
 
-    const allowedKeys = ['B916708', 'B795341']; // Amazon.com and Uber
-
+    const allowedKeys = ['B916708', 'B795341'];
     const filteredBrands = fullCatalog.brands
-      .filter((b: any) => allowedKeys.includes(b.brandKey))
-      .map((b: any) => ({
+      .filter((b) => allowedKeys.includes(b.brandKey))
+      .map((b) => ({
         brandKey: b.brandKey,
         displayName: b.displayName || b.brandKey,
         imageUrls: Object.values(b.imageUrls || {}),
-        cost: 50, // $10 = 50 pts
+        cost: 50,
       }));
 
     res.status(200).json({ brands: filteredBrands });
@@ -28,6 +27,7 @@ export const getRewardCatalog = async (req: Request, res: Response): Promise<voi
     });
   }
 };
+
 
 export const redeemReward = async (req: Request, res: Response): Promise<void> => {
   try {
