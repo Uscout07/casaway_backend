@@ -1,15 +1,24 @@
 // src/routes/chatRoutes.ts
-import express, { Request, Response, NextFunction, RequestHandler } from 'express'; // Import Request, Response, NextFunction, RequestHandler
+import express, { Request, Response, NextFunction, RequestHandler } from 'express';
 import { authenticateToken } from '../middleware/auth';
 import Chat from '../models/Chat';
 import User from '../models/User';
 import Message from '../models/Message';
 import asyncHandler from '../utils/asyncHandler';
+import Notification from '../models/Notifications'; // Import Notification model
+import mongoose from 'mongoose'; // Import mongoose to access ObjectId type
 
 const router = express.Router();
 
+// Extend Request to include userId from authenticateToken middleware
+declare module 'express-serve-static-core' {
+    interface Request {
+        userId?: string;
+    }
+}
+
 // Get all chats for the authenticated user
-router.get('/user', authenticateToken, asyncHandler(async (req, res): Promise<void> => { // <--- Explicitly type the handler's return
+router.get('/user', authenticateToken, asyncHandler(async (req, res): Promise<void> => {
     try {
         console.log(`[chatRoutes] Fetching chats for userId: ${req.userId}`);
 
@@ -40,28 +49,29 @@ router.get('/user', authenticateToken, asyncHandler(async (req, res): Promise<vo
 }));
 
 // Create or get a one-on-one chat
-router.post('/', authenticateToken, asyncHandler(async (req, res): Promise<void> => { // <--- Explicitly type the handler's return
+router.post('/', authenticateToken, asyncHandler(async (req, res): Promise<void> => {
     const { targetUserId } = req.body;
+    const currentUserId = req.userId;
 
     if (!targetUserId) {
         res.status(400).json({ msg: 'Target user ID is required.' });
-        return; // Explicitly return void
+        return;
     }
 
-    if (req.userId === targetUserId) {
+    if (currentUserId === targetUserId) {
         res.status(400).json({ msg: 'Cannot create a chat with yourself.' });
-        return; // Explicitly return void
+        return;
     }
 
     try {
         let chat = await Chat.findOne({
             isGroup: false,
             members: {
-                $all: [req.userId, targetUserId],
+                $all: [currentUserId, targetUserId],
                 $size: 2
             }
         })
-        .populate('members', 'name email profilePic');
+            .populate('members', 'name email profilePic');
 
         if (chat) {
             chat = await chat.populate({
@@ -75,11 +85,11 @@ router.post('/', authenticateToken, asyncHandler(async (req, res): Promise<void>
             });
             console.log('[CHAT_ROUTE] Existing chat found:', chat._id);
             res.status(200).json(chat);
-            return; // Explicitly return void
+            return;
         }
 
         const newChat = await Chat.create({
-            members: [req.userId, targetUserId],
+            members: [currentUserId, targetUserId],
             isGroup: false,
             lastMessage: null,
             messages: []
@@ -97,6 +107,17 @@ router.post('/', authenticateToken, asyncHandler(async (req, res): Promise<void>
                 }
             });
 
+        // Create notification for the target user that a new chat has been initiated
+        if (currentUserId && targetUserId) {
+            await Notification.create({
+                recipient: new mongoose.Types.ObjectId(targetUserId), // Convert to ObjectId
+                type: 'chat',
+                sourceUser: new mongoose.Types.ObjectId(currentUserId), // Convert to ObjectId
+                relatedId: newChat._id,
+                targetType: 'chat'
+            });
+        }
+
         console.log('[CHAT_ROUTE] New chat created:', createdChat?._id);
         res.status(201).json(createdChat);
 
@@ -107,7 +128,7 @@ router.post('/', authenticateToken, asyncHandler(async (req, res): Promise<void>
 }));
 
 // Get a specific chat by its ID
-router.get('/:chatId', authenticateToken, asyncHandler(async (req, res): Promise<void> => { // <--- Explicitly type the handler's return
+router.get('/:chatId', authenticateToken, asyncHandler(async (req, res): Promise<void> => {
     try {
         const { chatId } = req.params;
 
@@ -125,12 +146,12 @@ router.get('/:chatId', authenticateToken, asyncHandler(async (req, res): Promise
 
         if (!chat) {
             res.status(404).json({ msg: 'Chat not found.' });
-            return; // Explicitly return void
+            return;
         }
 
         if (!chat.members.some(member => member._id.toString() === req.userId)) {
             res.status(403).json({ msg: 'Unauthorized: You are not a member of this chat.' });
-            return; // Explicitly return void
+            return;
         }
 
         res.status(200).json(chat);

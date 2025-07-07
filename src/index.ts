@@ -21,7 +21,7 @@ import storyRoutes from './routes/storyRoutes';
 import referralRoutes from './routes/referralRoutes';
 import redeemRoutes from './routes/redeemRoutes';
 import rewardRoutes from './routes/rewardRoutes';
-import bodyParser from 'body-parser';
+import notificationRoutes from "./routes/notificationRoutes"
 
 
 // Import Chat model directly at the top for consistency
@@ -192,6 +192,7 @@ app.use('/api/stories', storyRoutes);
 app.use('/api/referral', referralRoutes);
 app.use('/api/redeem', redeemRoutes);
 app.use('/api/rewards', rewardRoutes);
+app.use('/api/notifications', notificationRoutes);
 console.log('[BACKEND] All API routes mounted.');
 
 

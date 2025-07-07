@@ -8,6 +8,7 @@ export interface IMessage extends Document {
     readBy: mongoose.Types.ObjectId[];
     createdAt: Date;
     updatedAt: Date;
+    hiddenBy: mongoose.Types.ObjectId[];
 }
 
 const messageSchema = new Schema<IMessage>(
@@ -15,7 +16,8 @@ const messageSchema = new Schema<IMessage>(
         chat: { type: mongoose.Schema.Types.ObjectId, ref: 'Chat', required: true },
         sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
         content: { type: String, trim: true, required: true },
-        readBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
+        readBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+        hiddenBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     },
     { timestamps: true }
 );

@@ -6,9 +6,18 @@ import Post from '../models/Post'; // To check if post exists
 import Listing from '../models/Listing'; // To check if listing exists
 import Comment from '../models/Comment';
 import mongoose from 'mongoose';
-import asyncHandler from '../utils/asyncHandler'; // Make sure this path is correct and asyncHandler is correctly typed
+import asyncHandler from '../utils/asyncHandler';
+import Notification from '../models/Notifications'; // Import Notification model
+import User from '../models/User'; // Import User model to find owner
 
 const router = express.Router();
+
+// Extend Request to include userId from authenticateToken middleware
+declare module 'express-serve-static-core' {
+    interface Request {
+        userId?: string;
+    }
+}
 
 // Helper to safely get error message (recommended to have this in a central utils file)
 function getErrorMessage(error: unknown): string {
@@ -22,34 +31,46 @@ function getErrorMessage(error: unknown): string {
 }
 
 // Toggle Like on a Post
-router.post('/toggle/post/:postId', authenticateToken, asyncHandler(async (req: Request, res: Response): Promise<void> => { // <--- Added Promise<void>
+router.post('/toggle/post/:postId', authenticateToken, asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { postId } = req.params;
     const userId = req.userId; // From authenticateToken middleware
 
     if (!userId) {
         res.status(401).json({ msg: 'User not authenticated' });
-        return; // Explicitly return void after sending response
+        return;
     }
 
     const post = await Post.findById(postId);
     if (!post) {
         res.status(404).json({ msg: 'Post not found' });
-        return; // Explicitly return void
+        return;
     }
 
     const existingLike = await Like.findOne({ user: userId, post: postId });
 
     if (existingLike) {
         await Like.deleteOne({ _id: existingLike._id });
+        // Optionally remove notification here if needed
         res.status(200).json({ liked: false, msg: 'Post unliked successfully' });
     } else {
         await Like.create({ user: userId, post: postId });
+
+        // Create notification for post owner
+        if (post.user.toString() !== userId) { // Don't notify if user likes their own post
+            await Notification.create({
+                recipient: post.user,
+                type: 'like',
+                sourceUser: userId,
+                relatedId: post._id,
+                targetType: 'post',
+            });
+        }
         res.status(201).json({ liked: true, msg: 'Post liked successfully' });
     }
 }));
 
 // Toggle Like on a Listing
-router.post('/toggle/listing/:listingId', authenticateToken, asyncHandler(async (req: Request, res: Response): Promise<void> => { // <--- Added Promise<void>
+router.post('/toggle/listing/:listingId', authenticateToken, asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { listingId } = req.params;
     const userId = req.userId; // From authenticateToken middleware
 
@@ -68,15 +89,27 @@ router.post('/toggle/listing/:listingId', authenticateToken, asyncHandler(async 
 
     if (existingLike) {
         await Like.deleteOne({ _id: existingLike._id });
+        // Optionally remove notification here if needed
         res.status(200).json({ liked: false, msg: 'Listing unliked successfully' });
     } else {
         await Like.create({ user: userId, listing: listingId });
+
+        // Create notification for listing owner
+        if (listing.user.toString() !== userId) { // Don't notify if user likes their own listing
+            await Notification.create({
+                recipient: listing.user,
+                type: 'like',
+                sourceUser: userId,
+                relatedId: listing._id,
+                targetType: 'listing',
+            });
+        }
         res.status(201).json({ liked: true, msg: 'Listing liked successfully' });
     }
 }));
 
 // Toggle Like on a Comment
-router.post('/toggle/comment/:commentId', authenticateToken, asyncHandler(async (req: Request, res: Response): Promise<void> => { // <--- Added Promise<void>
+router.post('/toggle/comment/:commentId', authenticateToken, asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { commentId } = req.params;
     const userId = req.userId;
 
@@ -112,6 +145,17 @@ router.post('/toggle/comment/:commentId', authenticateToken, asyncHandler(async 
         if (!comment.likes) comment.likes = [];
         comment.likes.push(new mongoose.Types.ObjectId(userId));
         await comment.save();
+
+        // Create notification for comment owner
+        if (comment.user.toString() !== userId) { // Don't notify if user likes their own comment
+            await Notification.create({
+                recipient: comment.user,
+                type: 'like',
+                sourceUser: userId,
+                relatedId: comment._id,
+                targetType: 'comment',
+            });
+        }
         res.status(200).json({
             liked: true,
             likesCount: comment.likes.length,
@@ -121,7 +165,7 @@ router.post('/toggle/comment/:commentId', authenticateToken, asyncHandler(async 
 }));
 
 // Get like status for a specific user on a specific item
-router.get('/status/:itemId', authenticateToken, asyncHandler(async (req: Request, res: Response): Promise<void> => { // <--- Added Promise<void>
+router.get('/status/:itemId', authenticateToken, asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { itemId } = req.params;
     const userId = req.userId;
 
@@ -148,21 +192,21 @@ router.get('/status/:itemId', authenticateToken, asyncHandler(async (req: Reques
 }));
 
 // Get total likes for a Post
-router.get('/count/post/:postId', asyncHandler(async (req: Request, res: Response): Promise<void> => { // <--- Added Promise<void>
+router.get('/count/post/:postId', asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { postId } = req.params;
     const count = await Like.countDocuments({ post: postId });
     res.json({ count });
 }));
 
 // Get total likes for a Listing
-router.get('/count/listing/:listingId', asyncHandler(async (req: Request, res: Response): Promise<void> => { // <--- Added Promise<void>
+router.get('/count/listing/:listingId', asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { listingId } = req.params;
     const count = await Like.countDocuments({ listing: listingId });
     res.json({ count });
 }));
 
 // Get total likes for a Comment
-router.get('/count/comment/:commentId', asyncHandler(async (req: Request, res: Response): Promise<void> => { // <--- Added Promise<void>
+router.get('/count/comment/:commentId', asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { commentId } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(commentId)) {
@@ -181,7 +225,7 @@ router.get('/count/comment/:commentId', asyncHandler(async (req: Request, res: R
 }));
 
 // Get comment like status for logged in user
-router.get('/status/comment/:commentId', authenticateToken, asyncHandler(async (req: Request, res: Response): Promise<void> => { // <--- Added Promise<void>
+router.get('/status/comment/:commentId', authenticateToken, asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { commentId } = req.params;
     const userId = req.userId;
 

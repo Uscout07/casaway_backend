@@ -6,10 +6,18 @@ import Post from '../models/Post';
 import Listing from '../models/Listing';
 import { authenticateToken } from '../middleware/auth';
 import mongoose from 'mongoose';
-import { IUser } from '../models/User'; // Still need IUser for other contexts if used
+import { IUser } from '../models/User';
 import asyncHandler from '../utils/asyncHandler';
+import Notification from '../models/Notifications'; // Import Notification model
 
 const router = express.Router();
+
+// Extend Request to include userId from authenticateToken middleware
+declare module 'express-serve-static-core' {
+    interface Request {
+        userId?: string;
+    }
+}
 
 // Define an interface for the user object after specific population
 export interface IPopulatedUserForComment {
@@ -19,14 +27,9 @@ export interface IPopulatedUserForComment {
     name?: string;
 }
 
-// Also, let's refine the type of the 'user' field in Comment to be more specific after population
-// You might need to adjust your Comment model's interface if it's currently just `user: ObjectId`
-// For now, we'll cast directly in the route, but a more robust solution might involve extending the Comment document.
-
-
 // Add a comment to a Post
 router.post('/:postId', authenticateToken, asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req as any).userId; // Or just req.userId if your global declaration works
+    const userId = req.userId;
     try {
         const { postId } = req.params;
         const { content, parentCommentId } = req.body;
@@ -53,10 +56,32 @@ router.post('/:postId', authenticateToken, asyncHandler(async (req: Request, res
             parentComment: parentCommentId || null,
         });
 
-        // The key change here: Cast to IPopulatedUserForComment
+        // Create notification based on comment type
+        if (parentCommentId) {
+            const parentComment = await Comment.findById(parentCommentId);
+            if (parentComment && parentComment.user.toString() !== userId) {
+                await Notification.create({
+                    recipient: parentComment.user,
+                    type: 'reply',
+                    sourceUser: userId,
+                    relatedId: newComment._id, // Related to the new comment (the reply)
+                    targetType: 'comment', // Target type is the parent comment
+                });
+            }
+        } else {
+            if (post.user.toString() !== userId) { // Don't notify if user comments on their own post
+                await Notification.create({
+                    recipient: post.user,
+                    type: 'comment',
+                    sourceUser: userId,
+                    relatedId: newComment._id, // Related to the new comment
+                    targetType: 'post',
+                });
+            }
+        }
+
         const populatedComment = await newComment.populate<{ user: IPopulatedUserForComment }>('user', 'username profilePic name');
-        
-        // Now, TypeScript knows the structure of populatedComment.user
+
         const transformedComment = {
             _id: populatedComment._id,
             user: {
@@ -89,37 +114,33 @@ router.get('/:postId', asyncHandler(async (req: Request, res: Response) => {
             return;
         }
 
-        // Use a type argument for populate to inform TypeScript
         const allComments = await Comment.find({ post: postId })
             .populate<{ user: IPopulatedUserForComment }>('user', 'username profilePic name')
-            .populate('mentionedUsers', 'username') // Assuming mentionedUsers are also populated with selected fields
+            .populate('mentionedUsers', 'username')
             .sort({ createdAt: 1 })
             .lean();
 
-        // Let's refine the type for comments in the map and arrays
-        interface ICommentWithReplies extends Document { // You might need to extend your base IComment if it exists
+        interface ICommentWithReplies extends mongoose.Document {
             _id: mongoose.Types.ObjectId;
             user: IPopulatedUserForComment;
             post: mongoose.Types.ObjectId;
             text: string;
             parentComment?: mongoose.Types.ObjectId;
             createdAt: Date;
-            replies: ICommentWithReplies[]; // Recursive type
-            // Add other fields you fetch if needed
+            replies: ICommentWithReplies[];
         }
 
         const commentMap = new Map<string, ICommentWithReplies>();
         const topLevelComments: ICommentWithReplies[] = [];
 
-        allComments.forEach((comment: any) => { // 'any' for now, better to cast allComments elements directly from populate
-            // Cast to ICommentWithReplies to safely add replies
+        allComments.forEach((comment: any) => {
             const processedComment: ICommentWithReplies = { ...comment, replies: [] };
             commentMap.set(processedComment._id.toString(), processedComment);
         });
 
-        allComments.forEach((comment: any) => { // 'any' for now
+        allComments.forEach((comment: any) => {
             const parentId = comment.parentComment?.toString();
-            const currentComment = commentMap.get(comment._id.toString()); // Get the already-typed comment from map
+            const currentComment = commentMap.get(comment._id.toString());
 
             if (parentId && commentMap.has(parentId)) {
                 let actualParent = commentMap.get(parentId);
@@ -141,7 +162,7 @@ router.get('/:postId', asyncHandler(async (req: Request, res: Response) => {
             }
         });
 
-        topLevelComments.forEach((comment: ICommentWithReplies) => { // Typed comment
+        topLevelComments.forEach((comment: ICommentWithReplies) => {
             if (comment.replies && comment.replies.length > 0) {
                 comment.replies.sort((a: ICommentWithReplies, b: ICommentWithReplies) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
             }
@@ -155,8 +176,8 @@ router.get('/:postId', asyncHandler(async (req: Request, res: Response) => {
                 profilePic: comment.user.profilePic,
                 name: comment.user.name
             },
-            postId: postId, // Assuming 'post' field from Comment model
-            content: comment.text, // Assuming 'text' field from Comment model
+            postId: postId,
+            content: comment.text,
             parentCommentId: comment.parentComment,
             createdAt: comment.createdAt,
             replies: comment.replies?.map((reply: ICommentWithReplies) => ({
@@ -183,7 +204,7 @@ router.get('/:postId', asyncHandler(async (req: Request, res: Response) => {
 
 // Add a comment to a Listing (keeping existing functionality)
 router.post('/listing/:listingId', authenticateToken, asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req as any).userId;
+    const userId = req.userId;
     try {
         const { listingId } = req.params;
         const { text, parentCommentId } = req.body;
@@ -215,9 +236,32 @@ router.post('/listing/:listingId', authenticateToken, asyncHandler(async (req: R
             parentComment: parentCommentId || null,
         });
 
-        // The key change here: Cast to IPopulatedUserForComment
+        // Create notification based on comment type for listing
+        if (parentCommentId) {
+            const parentComment = await Comment.findById(parentCommentId);
+            if (parentComment && parentComment.user.toString() !== userId) {
+                await Notification.create({
+                    recipient: parentComment.user,
+                    type: 'reply',
+                    sourceUser: userId,
+                    relatedId: newComment._id,
+                    targetType: 'comment',
+                });
+            }
+        } else {
+            if (listing.user.toString() !== userId) { // Don't notify if user comments on their own listing
+                await Notification.create({
+                    recipient: listing.user,
+                    type: 'comment',
+                    sourceUser: userId,
+                    relatedId: newComment._id,
+                    targetType: 'listing',
+                });
+            }
+        }
+
         const populatedComment = await newComment.populate<{ user: IPopulatedUserForComment }>('user', 'username profilePic name');
-        res.status(201).json(populatedComment); // populatedComment.user will now be of type IPopulatedUserForComment
+        res.status(201).json(populatedComment);
     } catch (err) {
         console.error('Error adding comment to listing:', err);
         res.status(500).json({ msg: 'Server error' });
@@ -228,14 +272,12 @@ router.post('/listing/:listingId', authenticateToken, asyncHandler(async (req: R
 router.get('/listing/:listingId', asyncHandler(async (req: Request, res: Response) => {
     try {
         const { listingId } = req.params;
-        
+
         if (!mongoose.Types.ObjectId.isValid(listingId)) {
             res.status(400).json({ msg: 'Invalid listing ID' });
             return;
         }
 
-        // Assuming Comment.getInstagramStyleComments returns a structure that matches your needs
-        // If it also populates user, you might need to adjust its return type.
         const comments = await Comment.getInstagramStyleComments(listingId);
         res.json(comments);
     } catch (err) {
@@ -244,9 +286,10 @@ router.get('/listing/:listingId', asyncHandler(async (req: Request, res: Respons
     }
 }));
 
-// Toggle Like on a Comment
+// Toggle Like on a Comment (This endpoint is redundant if likeRoutes.ts already handles it)
+// Keeping it for now as per original file, but ideally consolidate like logic.
 router.post('/toggle-like/:commentId', authenticateToken, asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req as any).userId;
+    const userId = req.userId;
     try {
         const { commentId } = req.params;
 
@@ -277,6 +320,17 @@ router.post('/toggle-like/:commentId', authenticateToken, asyncHandler(async (re
         } else {
             comment.likes.push(new mongoose.Types.ObjectId(userId));
             await comment.save();
+
+            // Create notification for comment owner
+            if (comment.user.toString() !== userId) { // Don't notify if user likes their own comment
+                await Notification.create({
+                    recipient: comment.user,
+                    type: 'like',
+                    sourceUser: userId,
+                    relatedId: comment._id,
+                    targetType: 'comment',
+                });
+            }
             res.status(200).json({ liked: true, likesCount: comment.likes.length, msg: 'Comment liked' });
             return;
         }
@@ -290,7 +344,7 @@ router.post('/toggle-like/:commentId', authenticateToken, asyncHandler(async (re
 router.get('/likes/:commentId', asyncHandler(async (req: Request, res: Response) => {
     try {
         const { commentId } = req.params;
-        
+
         if (!mongoose.Types.ObjectId.isValid(commentId)) {
             res.status(400).json({ msg: 'Invalid comment ID' });
             return;
