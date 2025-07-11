@@ -42,7 +42,11 @@ const userSchema = new Schema<IUser>(
     country: { type: String }, // Optional country for user location
 
     // User role and permissions
-    role: { type: String, enum: ["user", "admin"], default: "user" }, // Role for access control
+    role: {
+      type: String,
+      enum: ["user", "admin", "ambassador"],
+      default: "user"
+    }, // Role for access control
 
     // Chat and social features
     chats: [{ type: mongoose.Schema.Types.ObjectId, ref: "Chat" }], // List of chat IDs the user is part of

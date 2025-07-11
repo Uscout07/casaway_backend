@@ -21,7 +21,8 @@ import storyRoutes from './routes/storyRoutes';
 import referralRoutes from './routes/referralRoutes';
 import redeemRoutes from './routes/redeemRoutes';
 import rewardRoutes from './routes/rewardRoutes';
-import notificationRoutes from "./routes/notificationRoutes"
+import notificationRoutes from "./routes/notificationRoutes";
+
 
 
 // Import Chat model directly at the top for consistency
