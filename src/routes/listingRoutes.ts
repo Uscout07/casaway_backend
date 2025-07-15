@@ -78,7 +78,9 @@ router.post('/', authenticateToken, asyncHandler(async (req: Request, res: Respo
 
     const {
         title, details, type, amenities, city, country,
-        roommates, tags, availability, images, status, thumbnail, features, petTypes
+        roommates, tags, availability, images, status, thumbnail, features, petTypes,
+        // NEW: wifiSpeed from request body
+        wifiSpeed
     } = req.body;
     const userId = req.userId; // Assuming authenticateToken sets req.userId
 
@@ -137,6 +139,7 @@ router.post('/', authenticateToken, asyncHandler(async (req: Request, res: Respo
         thumbnail,
         status,
         petTypes: petTypes || [],
+        wifiSpeed: wifiSpeed || { download: 0, upload: 0 }, // NEW: Save Wi-Fi speed with defaults
     });
 
     res.status(201).json(newListing); // Send response once after successful creation
@@ -301,12 +304,18 @@ router.patch('/:id', authenticateToken, asyncHandler(async (req: Request, res: R
     const updates = req.body;
     const allowedUpdates = [
         'title', 'details', 'type', 'amenities', 'city', 'country',
-        'roommates', 'tags', 'availability', 'images', 'thumbnail', 'status'
+        'roommates', 'tags', 'availability', 'images', 'thumbnail', 'status',
+        'wifiSpeed' // NEW: Allow wifiSpeed to be updated
     ];
 
     Object.keys(updates).forEach(key => {
         if (allowedUpdates.includes(key)) {
-            (listing as any)[key] = updates[key]; // Type assertion for flexibility
+            // Special handling for nested objects like wifiSpeed
+            if (key === 'wifiSpeed' && typeof updates[key] === 'object' && updates[key] !== null) {
+                (listing as any)[key] = { ...(listing as any)[key], ...updates[key] };
+            } else {
+                (listing as any)[key] = updates[key]; // Type assertion for flexibility
+            }
         }
     });
 

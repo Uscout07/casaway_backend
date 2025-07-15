@@ -1,3 +1,4 @@
+// Listing.ts
 import mongoose from 'mongoose';
 
 const listingSchema = new mongoose.Schema(
@@ -21,9 +22,14 @@ const listingSchema = new mongoose.Schema(
     ],
     images: [{ type: String }],
     thumbnail: { type: String },
-    status: { type: String, enum: ['draft', 'published'], default: 'draft' }
+    status: { type: String, enum: ['draft', 'published'], default: 'draft' },
+    // NEW: Wi-Fi Speed fields
+    wifiSpeed: {
+      download: { type: Number, min: 0, default: 0 },
+      upload: { type: Number, min: 0, default: 0 },
+    }
   },
   { timestamps: true }
 );
 
-export default mongoose.models.Listing || mongoose.model('Listing', listingSchema); 
+export default mongoose.models.Listing || mongoose.model('Listing', listingSchema);

@@ -22,6 +22,7 @@ import referralRoutes from './routes/referralRoutes';
 import redeemRoutes from './routes/redeemRoutes';
 import rewardRoutes from './routes/rewardRoutes';
 import notificationRoutes from "./routes/notificationRoutes";
+import speedTestRoutes from "./routes/speedTest.routes";
 
 
 
@@ -194,6 +195,7 @@ app.use('/api/referral', referralRoutes);
 app.use('/api/redeem', redeemRoutes);
 app.use('/api/rewards', rewardRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/speedtest', speedTestRoutes);
 console.log('[BACKEND] All API routes mounted.');
 
 
