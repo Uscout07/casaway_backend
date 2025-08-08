@@ -1,11 +1,16 @@
 // src/routes/listingRoutes.ts
 import mongoose from 'mongoose';
 import express, { Request, Response } from 'express';
+import multer from 'multer';
 import Listing from '../models/Listing'; // Adjust path if needed
 import { authenticateToken } from '../middleware/auth'; // Adjust path if needed
 import asyncHandler from '../utils/asyncHandler'; // Import asyncHandler
+import { uploadToS3 } from '../utils/s3';
 
 const router = express.Router();
+
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
 
 // Extend Request to include userId from authenticateToken middleware
 declare module 'express-serve-static-core' {
@@ -71,14 +76,14 @@ router.get('/autocomplete/countries', asyncHandler(async (req: Request, res: Res
 }));
 
 // 3) CREATE LISTING
-router.post('/', authenticateToken, asyncHandler(async (req: Request, res: Response): Promise<void> => {
+router.post('/', authenticateToken, upload.array('images', 10), asyncHandler(async (req: Request, res: Response): Promise<void> => {
     console.log('=== CREATE LISTING endpoint hit ===');
     console.log('Headers:', req.headers);
     console.log('Raw Request Body:', req.body); // Log the incoming body
 
     const {
         title, details, type, amenities, city, country,
-        roommates, tags, availability, images, status, thumbnail, features, petTypes,
+        roommates, tags, availability, status, thumbnail, features, petTypes,
         // NEW: wifiSpeed from request body
         wifiSpeed
     } = req.body;
@@ -89,10 +94,13 @@ router.post('/', authenticateToken, asyncHandler(async (req: Request, res: Respo
         res.status(401).json({ msg: 'User not authenticated' });
         return;
     }
-    if (!title || !details || !type || !city || !country || !images || images.length === 0 || !thumbnail) {
-        res.status(400).json({ msg: 'Missing required listing fields (title, details, type, city, country, images, thumbnail).' });
+    if (!title || !details || !type || !city || !country || !req.files || (req.files as Express.Multer.File[]).length === 0) {
+        res.status(400).json({ msg: 'Missing required listing fields (title, details, type, city, country, images).' });
         return;
     }
+
+    const files = req.files as Express.Multer.File[];
+    const imageUrls = await Promise.all(files.map(file => uploadToS3(file)));
 
     // --- Correctly format availability array for Mongoose ---
     const formattedAvailability = Array.isArray(availability)
@@ -135,8 +143,8 @@ router.post('/', authenticateToken, asyncHandler(async (req: Request, res: Respo
         roommates: roommates || [],
         tags: tags || [],
         availability: formattedAvailability, // <--- This is the crucial fix
-        images,
-        thumbnail,
+        images: imageUrls,
+        thumbnail: imageUrls[0],
         status,
         petTypes: petTypes || [],
         wifiSpeed: wifiSpeed || { download: 0, upload: 0 }, // NEW: Save Wi-Fi speed with defaults
@@ -282,7 +290,7 @@ router.get('/user/:userId', asyncHandler(async (req: Request, res: Response): Pr
 }));
 
 // 7) UPDATE LISTING
-router.patch('/:id', authenticateToken, asyncHandler(async (req: Request, res: Response): Promise<void> => {
+router.patch('/:id', authenticateToken, upload.array('images', 10), asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
     const userId = req.userId; // ID of the authenticated user
 
@@ -300,11 +308,18 @@ router.patch('/:id', authenticateToken, asyncHandler(async (req: Request, res: R
         return; // Early exit
     }
 
+    // Upload new images to S3
+    const files = req.files as Express.Multer.File[];
+    let newImageUrls: string[] = [];
+    if (files && files.length > 0) {
+        newImageUrls = await Promise.all(files.map(file => uploadToS3(file)));
+    }
+
     // Update listing fields from req.body
     const updates = req.body;
     const allowedUpdates = [
         'title', 'details', 'type', 'amenities', 'city', 'country',
-        'roommates', 'tags', 'availability', 'images', 'thumbnail', 'status',
+        'roommates', 'tags', 'availability', 'status',
         'wifiSpeed' // NEW: Allow wifiSpeed to be updated
     ];
 
@@ -318,6 +333,16 @@ router.patch('/:id', authenticateToken, asyncHandler(async (req: Request, res: R
             }
         }
     });
+
+    // Add new image URLs to the existing ones
+    if (newImageUrls.length > 0) {
+        listing.images = [...listing.images, ...newImageUrls];
+    }
+
+    // Update thumbnail if new images are uploaded
+    if (newImageUrls.length > 0 && !listing.thumbnail) {
+        listing.thumbnail = newImageUrls[0];
+    }
 
     await listing.save();
     res.json(listing); // No return here

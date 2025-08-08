@@ -1,13 +1,16 @@
 // src/routes/postRoutes.ts
 import express, { Request, Response } from 'express';
+import multer from 'multer';
 import Post from '../models/Post'; // Assuming you have a Post model defined
 import { authenticateToken } from '../middleware/auth'; // Assuming auth middleware exists
 import mongoose from 'mongoose';
 import asyncHandler from '../utils/asyncHandler'; // Import asyncHandler
-
-// Removed multer import as it's no longer needed for JSON body
+import { uploadToS3 } from '../utils/s3';
 
 const router = express.Router();
+
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
 
 // Extend Request to include userId from authenticateToken middleware
 declare module 'express-serve-static-core' {
@@ -18,12 +21,12 @@ declare module 'express-serve-static-core' {
 
 // Create a new post
 // POST /api/posts — now receives JSON with image URLs
-router.post('/', authenticateToken, asyncHandler(async (req: Request, res: Response): Promise<void> => {
+router.post('/', authenticateToken, upload.array('images', 10), asyncHandler(async (req: Request, res: Response): Promise<void> => {
     console.log('=== /api/posts HIT (Receiving JSON) ===');
     console.log('Headers:', req.headers);
     console.log('Body:', req.body); // req.body will now contain imageUrl and images directly
 
-    const { caption, city, country, status, imageUrl, images } = req.body;
+    const { caption, city, country, status } = req.body;
     const userId = req.userId; // Retrieve userId from the request set by authenticateToken
 
     const tagsRaw = req.body.tags;
@@ -32,16 +35,13 @@ router.post('/', authenticateToken, asyncHandler(async (req: Request, res: Respo
       typeof tagsRaw === 'string' ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) :
       [];
 
-    // Validate all required fields, including userId and image URLs
-    if (!caption || !city || !country || !status || !userId || !imageUrl || !images || images.length === 0) {
-      res.status(400).json({ msg: 'Missing required fields (caption, city, country, status, userId, imageUrl, or images).' });
+    if (!caption || !city || !country || !status || !userId || !req.files || (req.files as Express.Multer.File[]).length === 0) {
+      res.status(400).json({ msg: 'Missing required fields (caption, city, country, status, userId, images).' });
       return;
     }
-    // Basic validation for imageUrl to be a string and images to be an array of strings
-    if (typeof imageUrl !== 'string' || !Array.isArray(images) || !images.every(item => typeof item === 'string')) {
-        res.status(400).json({ msg: 'Invalid format for imageUrl or images. Expected string URLs.' });
-        return;
-    }
+
+    const files = req.files as Express.Multer.File[];
+    const imageUrls = await Promise.all(files.map(file => uploadToS3(file)));
 
     const newPost = await Post.create({
       user: userId, // Associate post with the authenticated user
@@ -50,8 +50,8 @@ router.post('/', authenticateToken, asyncHandler(async (req: Request, res: Respo
       country,
       status,
       tags,
-      imageUrl: imageUrl, // Directly use imageUrl from body
-      images: images,     // Directly use images array from body
+      imageUrl: imageUrls[0], // Directly use imageUrl from body
+      images: imageUrls,     // Directly use images array from body
     });
 
     console.log('✅ Post saved to database:', newPost);
@@ -107,11 +107,10 @@ router.get('/search/tags', asyncHandler(async (req: Request, res: Response): Pro
 
 // Update a post by ID
 // This route will continue to expect updates in JSON format.
-router.patch('/:id', authenticateToken, asyncHandler(async (req: Request, res: Response): Promise<void> => {
+router.patch('/:id', authenticateToken, upload.array('images', 10), asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
     const updates = req.body;
-    // Ensure 'images' and 'imageUrl' are allowed for updates if they can be changed post-creation
-    const allowedUpdates = ['caption', 'tags', 'city', 'country', 'images', 'imageUrl', 'status'];
+    const allowedUpdates = ['caption', 'tags', 'city', 'country', 'status'];
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
         res.status(400).json({ msg: 'Invalid post ID format.' });
@@ -129,23 +128,24 @@ router.patch('/:id', authenticateToken, asyncHandler(async (req: Request, res: R
         return;
     }
 
+    const files = req.files as Express.Multer.File[];
+    let newImageUrls: string[] = [];
+    if (files && files.length > 0) {
+        newImageUrls = await Promise.all(files.map(file => uploadToS3(file)));
+    }
+
     Object.keys(updates).forEach(key => {
         if (allowedUpdates.includes(key)) {
-            // Special handling for 'images' and 'imageUrl' if they are being updated
-            // Ensure they are valid URLs/array of URLs
-            if (key === 'imageUrl' && typeof updates[key] !== 'string') {
-                // You might want more robust URL validation here
-                console.warn(`Attempted to update imageUrl with non-string value for post ${id}`);
-                return; // Skip this update if invalid
-            }
-            if (key === 'images' && (!Array.isArray(updates[key]) || !updates[key].every((item: any) => typeof item === 'string'))) {
-                // You might want more robust array of URL validation here
-                console.warn(`Attempted to update images with invalid array of strings for post ${id}`);
-                return; // Skip this update if invalid
-            }
             (post as any)[key] = updates[key];
         }
     });
+
+    if (newImageUrls.length > 0) {
+        post.images = [...post.images, ...newImageUrls];
+        if (!post.imageUrl) {
+            post.imageUrl = newImageUrls[0];
+        }
+    }
 
     await post.save();
     res.json(post);

@@ -1,13 +1,18 @@
 // src/routes/userRoutes.ts
 import express, { Request, Response } from 'express';
+import multer from 'multer';
 import User from '../models/User';
 import { authenticateToken } from '../middleware/auth';
 import asyncHandler from '../utils/asyncHandler'; // Import asyncHandler
 import mongoose from 'mongoose'; // For ObjectId validation
 import Listing from '../models/Listing';
 import Post from '../models/Post';
+import { uploadToS3 } from '../utils/s3';
 
 const router = express.Router();
+
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
 
 interface AuthenticatedRequest extends Request {
     userId?: string;
@@ -49,9 +54,9 @@ router.get('/me', authenticateToken, asyncHandler(async (req: AuthenticatedReque
 }));
 
 // Complete profile setup (NEW ROUTE)
-router.post('/complete-profile', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.post('/complete-profile', authenticateToken, upload.single('profilePic'), asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const userId = req.userId;
-    const { username, name, phone, city, country, profilePic, instagramUrl, bio } = req.body;
+    const { username, name, phone, city, country, instagramUrl, bio } = req.body;
 
     if (!userId) {
         res.status(401).json({ msg: 'User not authenticated.' });
@@ -75,6 +80,11 @@ router.post('/complete-profile', authenticateToken, asyncHandler(async (req: Aut
         return;
     }
 
+    let profilePicUrl = req.body.profilePic;
+    if (req.file) {
+        profilePicUrl = await uploadToS3(req.file);
+    }
+
     const updatedUser = await User.findByIdAndUpdate(
         userId,
         {
@@ -83,7 +93,7 @@ router.post('/complete-profile', authenticateToken, asyncHandler(async (req: Aut
             phone,
             city,
             country,
-            profilePic,
+            profilePic: profilePicUrl,
             instagramUrl,
             bio,
             isProfileComplete: true
@@ -152,7 +162,7 @@ router.get('/:id/following', asyncHandler(async (req: Request, res: Response): P
 }));
 
 // Update user profile
-router.put('/:id', authenticateToken, asyncHandler(async (req: Request, res: Response): Promise<void> => {
+router.put('/:id', authenticateToken, upload.single('profilePic'), asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const userId = req.userId?.toString();
     const targetUserId = req.params.id;
 
@@ -171,7 +181,12 @@ router.put('/:id', authenticateToken, asyncHandler(async (req: Request, res: Res
         return;
     }
 
-    const updated = await User.findByIdAndUpdate(targetUserId, req.body, { new: true }).select('-password');
+    const updates = req.body;
+    if (req.file) {
+        updates.profilePic = await uploadToS3(req.file);
+    }
+
+    const updated = await User.findByIdAndUpdate(targetUserId, updates, { new: true }).select('-password');
     if (!updated) {
         res.status(404).json({ msg: 'User not found.' });
         return;
@@ -196,9 +211,9 @@ router.get('/search/users', asyncHandler(async (req: Request, res: Response): Pr
 }));
 
 // Edit profile route (PATCH for partial updates)
-router.patch('/edit', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.patch('/edit', authenticateToken, upload.single('profilePic'), asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const userId = req.userId;
-    const { name, username, phone, city, country, profilePic, instagramUrl, bio } = req.body; // Added bio back for consistency
+    const { name, username, phone, city, country, instagramUrl, bio } = req.body;
 
     if (!userId) {
         res.status(401).json({ msg: 'User not authenticated.' });
@@ -218,9 +233,14 @@ router.patch('/edit', authenticateToken, asyncHandler(async (req: AuthenticatedR
         }
     }
 
+    const updates: any = { name, username, phone, city, country, instagramUrl, bio };
+    if (req.file) {
+        updates.profilePic = await uploadToS3(req.file);
+    }
+
     const updatedUser = await User.findByIdAndUpdate(
         userId,
-        { name, username, phone, city, country, profilePic, instagramUrl, bio }, // Included bio in update fields
+        updates,
         { new: true }
     ).select('-password');
 
@@ -293,5 +313,7 @@ router.delete('/delete', authenticateToken, asyncHandler(async (req: Authenticat
     // 3. Send a success response.
     res.status(200).json({ message: 'User and associated data deleted successfully.' });
 }));
+
+
 
 export default router;

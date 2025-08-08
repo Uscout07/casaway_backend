@@ -12,6 +12,8 @@ export interface IUser extends Document {
   phone?: string;
   city?: string;
   country?: string;
+  latitude?: number;
+  longitude?: number;
   role: "user" | "admin";
   chats: Types.ObjectId[];
   createdAt: Date;
@@ -23,6 +25,10 @@ export interface IUser extends Document {
   referralCode: string;
   referredBy?: string | null;
   points: number;
+  prelaunch_completed: boolean;
+  dream_countries: string[];
+  dream_cities: string[];
+  swap_dates: { start: Date; end: Date }[];
 }
 
 // User schema for MongoDB collection
@@ -40,6 +46,8 @@ const userSchema = new Schema<IUser>(
     phone: { type: String }, // Optional phone number
     city: { type: String }, // Optional city for user location
     country: { type: String }, // Optional country for user location
+    latitude: { type: Number },
+    longitude: { type: Number },
 
     // User role and permissions
     role: {
@@ -61,6 +69,12 @@ const userSchema = new Schema<IUser>(
     referralCode: { type: String, unique: true }, // Unique code for inviting others
     referredBy: { type: String, default: null }, // Referral code of the user who invited
     points: { type: Number, default: 0 }, // Reward points for user activity
+
+    // Pre-launch fields
+    prelaunch_completed: { type: Boolean, default: false },
+    dream_countries: [{ type: String }],
+    dream_cities: [{ type: String }],
+    swap_dates: [{ start: Date, end: Date }],
   },
   { timestamps: true } // Automatically manage createdAt and updatedAt
 );

@@ -1,7 +1,7 @@
-// Updated index.ts with Socket.IO support
+import dotenv from 'dotenv';
+dotenv.config(); 
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -22,6 +22,8 @@ import referralRoutes from './routes/referralRoutes';
 import redeemRoutes from './routes/redeemRoutes';
 import rewardRoutes from './routes/rewardRoutes';
 import notificationRoutes from "./routes/notificationRoutes";
+import prelaunchRoutes from './routes/prelaunch.routes';
+import locationRoutes from './routes/locationRoutes'; // Import location routes
 
 
 
@@ -29,7 +31,8 @@ import notificationRoutes from "./routes/notificationRoutes";
 // Import Chat model directly at the top for consistency
 import Chat from './models/Chat'; // Assuming Chat.ts exports default Chat model
 
-dotenv.config();
+import path from 'path';
+
 
 const app = express();
 const server = createServer(app);
@@ -195,6 +198,8 @@ app.use('/api/referral', referralRoutes);
 app.use('/api/redeem', redeemRoutes);
 app.use('/api/rewards', rewardRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/prelaunch', prelaunchRoutes);
+app.use('/api/locations', locationRoutes); // Use the new location routes
 
 console.log('[BACKEND] All API routes mounted.');
 

@@ -2,42 +2,41 @@ import express, { Request, Response } from 'express';
 import multer from 'multer';
 import Story from '../models/stories';
 import { authenticateToken } from '../middleware/auth';
-import User, { IUser } from '../models/User'; // Import your User model and IUser interface
+import User from '../models/User';
+import { uploadToS3 } from '../utils/s3';
 
 const router = express.Router();
 
-const storage = multer.diskStorage({
-  destination: 'uploads/',
-  filename: (_, file, cb) => {
-    cb(null, Date.now() + '-' + file.originalname);
-  },
-});
-
+const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 // POST /api/stories - upload a new story
 router.post('/', authenticateToken, upload.single('media'), async (req: Request, res: Response) => {
   try {
-    const userId = req.userId; // Access userId directly from req
+    const userId = req.userId;
     if (!userId) {
-      // Don't return res.status().json(), just send and return void
       res.status(401).json({ message: 'User ID not found in request. Authentication failed.' });
-      return; // Explicitly return to end function execution
+      return;
     }
 
-    const user = await User.findById(userId); // Fetch the user from the database
+    const user = await User.findById(userId);
     if (!user) {
-      res.status(404).json({ message: 'User not found.' }); // Changed to 404 for clarity
-      return; // Explicitly return
+      res.status(404).json({ message: 'User not found.' });
+      return;
     }
 
-    const mediaUrl = `/uploads/${req.file?.filename}`;
+    if (!req.file) {
+        res.status(400).json({ message: 'No file uploaded.' });
+        return;
+    }
+
+    const mediaUrl = await uploadToS3(req.file);
     const caption = req.body.caption || '';
     const createdAt = new Date();
     const expiresAt = new Date(createdAt.getTime() + 24 * 60 * 60 * 1000);
 
     const story = await Story.create({
-      user: user._id, // Use user._id from the fetched user object
+      user: user._id,
       mediaUrl,
       caption,
       createdAt,
