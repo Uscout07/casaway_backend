@@ -45,7 +45,8 @@ const corsOptions = {
     'http://localhost:3001',
     'https://casaway.vercel.app',
     'https://192.168.29.237:8081',
-    'exp://192.168.29.237:8081'
+    'exp://192.168.29.237:8081',
+    'https://casaway-prelaunch.vercel.app/'
     // Add your production frontend URL here
   ],
   credentials: true,
