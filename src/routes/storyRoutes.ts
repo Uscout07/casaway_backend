@@ -11,7 +11,7 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 // POST /api/stories - upload a new story
-router.post('/', authenticateToken, upload.single('media'), async (req: Request, res: Response) => {
+router.post('/upload', authenticateToken, upload.single('media'), async (req: Request, res: Response) => {
   try {
     const userId = req.userId;
     if (!userId) {
