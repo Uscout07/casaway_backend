@@ -24,6 +24,7 @@ import rewardRoutes from './routes/rewardRoutes';
 import notificationRoutes from "./routes/notificationRoutes";
 import prelaunchRoutes from './routes/prelaunch.routes';
 import locationRoutes from './routes/locationRoutes'; // Import location routes
+import speedTestRoutes from './routes/speedTest'; // Import speed test routes
 
 
 
@@ -46,7 +47,8 @@ const corsOptions = {
     'https://casaway.vercel.app',
     'https://192.168.29.237:8081',
     'exp://192.168.29.237:8081',
-    'https://casaway-prelaunch.vercel.app'
+    'https://casaway-prelaunch.vercel.app',
+    'https://casaway-backend.onrender.com'
     // Add your production frontend URL here
   ],
   credentials: true,
@@ -201,6 +203,7 @@ app.use('/api/rewards', rewardRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/prelaunch', prelaunchRoutes);
 app.use('/api/locations', locationRoutes); // Use the new location routes
+app.use('/api/speedtest', speedTestRoutes); // Add speed test route
 
 console.log('[BACKEND] All API routes mounted.');
 

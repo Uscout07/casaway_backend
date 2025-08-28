@@ -2,11 +2,18 @@ import { Request, Response } from 'express';
 import User from '../models/User';
 
 export const completeProfile = async (req: Request, res: Response): Promise<void> => {
+  console.log('=== /api/prelaunch/complete-profile endpoint hit ===');
+  console.log('Headers:', req.headers);
+  console.log('Body:', req.body);
+  
   const { dream_countries, dream_cities, swap_dates, bio, city, country } = req.body;
-  const userId = (req as any).user.id;
+  const userId = (req as any).userId;
+  
+  console.log('UserId from request:', userId);
 
   try {
     const user = await User.findById(userId);
+    console.log('User found:', user ? 'Yes' : 'No');
 
     if (!user) {
       res.status(404).json({ message: 'User not found' });
@@ -37,6 +44,7 @@ export const completeProfile = async (req: Request, res: Response): Promise<void
     user.prelaunch_completed = true;
 
     await user.save();
+    console.log('Profile updated successfully for user:', userId);
 
     res.status(200).json({ message: 'Pre-launch profile completed successfully' });
   } catch (error) {
