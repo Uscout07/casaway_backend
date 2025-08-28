@@ -13,12 +13,11 @@ const measureDownloadSpeed = async (url: string, timeout: number = 10000): Promi
     const response = await axios.get(url, {
       timeout,
       responseType: 'arraybuffer',
-      maxContentLength: 50 * 1024 * 1024, // 50MB max
     });
     
     const endTime = Date.now();
     const duration = (endTime - startTime) / 1000; // Convert to seconds
-    const sizeInBytes = response.data.length;
+    const sizeInBytes = (response.data as Buffer).length;
     const sizeInMbps = (sizeInBytes * 8) / (1024 * 1024); // Convert bytes to Mbps
     const speedMbps = sizeInMbps / duration;
     
