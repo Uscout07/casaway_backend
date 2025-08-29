@@ -27,6 +27,32 @@ function logError(prefix: string, error: unknown) {
     }
 }
 
+// Get all users (for group chat member selection)
+router.get('/', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    console.log('=== /users endpoint hit ===');
+    console.log('Headers:', req.headers);
+    console.log('UserId from middleware:', req.userId);
+
+    if (!req.userId) {
+        console.error('No userId found in request after auth middleware');
+        res.status(401).json({ msg: 'Authentication failed - no user ID' });
+        return;
+    }
+
+    try {
+        // Fetch all users except the current user
+        const users = await User.find({ _id: { $ne: req.userId } })
+            .select('name email profilePic username city country')
+            .limit(100); // Limit to prevent performance issues
+
+        console.log(`Found ${users.length} users`);
+        res.json(users);
+    } catch (error) {
+        console.error('Error fetching users:', error);
+        res.status(500).json({ msg: 'Failed to fetch users' });
+    }
+}));
+
 // Updated /me route with debugging
 router.get('/me', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     console.log('=== /users/me endpoint hit ===');
