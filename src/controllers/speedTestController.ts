@@ -85,8 +85,8 @@ export const runFallbackSpeedTest = async (req: Request, res: Response) => {
         successfulTests++;
         
         console.log(`Test ${url}: ${downloadSpeed.toFixed(2)} Mbps (${duration.toFixed(2)}s)`);
-      } catch (error) {
-        console.log(`Test failed for ${url}:`, error.message);
+      } catch (error: any) {
+        console.log(`Test failed for ${url}:`, error?.message || 'Unknown error');
         continue;
       }
     }
@@ -128,11 +128,11 @@ export const speedTest = async (req: Request, res: Response) => {
     // Use the fallback method as it's more reliable and accurate
     console.log('Using reliable HTTP-based speed test...');
     return await runFallbackSpeedTest(req, res);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Speed test failed:', error);
     res.status(500).json({ 
       error: 'Speed test unavailable', 
-      message: 'Speed test is currently unavailable. Please check your internet connection and try again.' 
+      message: error?.message || 'Speed test is currently unavailable. Please check your internet connection and try again.' 
     });
   }
 };
