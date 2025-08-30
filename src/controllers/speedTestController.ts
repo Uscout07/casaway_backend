@@ -79,8 +79,8 @@ export const runSpeedTest = async (req: Request, res: Response) => {
       const speedResult = await speedtest.getSpeed();
       console.log("Raw speed result:", speedResult);
       
-      // fast-speedtest-api returns bps, convert to Mbps
-      const speedInMbps = speedResult / 1000000;
+      // fast-speedtest-api returns a scaled value, convert to Mbps
+      const speedInMbps = speedResult / 100;
       console.log("Speed in Mbps:", speedInMbps);
       
       // Check if the result is reasonable (between 0.1 and 10000 Mbps)
