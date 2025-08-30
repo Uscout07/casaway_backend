@@ -128,4 +128,38 @@ router.post('/:id/view', authenticateToken, async (req: Request, res: Response) 
   }
 });
 
+// DELETE /api/stories/:id - delete a story
+router.delete('/:id', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ message: 'User ID not found in request. Authentication failed.' });
+      return;
+    }
+
+    const storyId = req.params.id;
+
+    // Find the story and check if the user owns it
+    const story = await Story.findById(storyId);
+    if (!story) {
+      res.status(404).json({ message: 'Story not found.' });
+      return;
+    }
+
+    // Check if the user owns the story
+    if (story.user.toString() !== userId) {
+      res.status(403).json({ message: 'You can only delete your own stories.' });
+      return;
+    }
+
+    // Delete the story
+    await Story.findByIdAndDelete(storyId);
+
+    res.status(200).json({ message: 'Story deleted successfully' });
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ message: err.message || 'Failed to delete story' });
+  }
+});
+
 export default router;
