@@ -1,17 +1,20 @@
 import express from 'express';
 import { authenticateToken } from '../middleware/auth';
-import { speedTest, runSpeedTest, runFallbackSpeedTest } from '../controllers/speedTestController';
+import { speedTest, runAdvancedSpeedTest, runFallbackSpeedTest, runCloudflareSpeedTest } from '../controllers/speedTestController';
 import asyncHandler from '../utils/asyncHandler';
 
 const router = express.Router();
 
-// Main speed test endpoint - tries both methods
+// Main speed test endpoint - uses Cloudflare Speedtest API
 router.post('/', authenticateToken, asyncHandler(speedTest));
 
-// Direct speed test endpoint (using fast-speedtest-api)
-router.post('/fast', authenticateToken, asyncHandler(runSpeedTest));
+// Cloudflare Speedtest API endpoint
+router.post('/cloudflare', authenticateToken, asyncHandler(runCloudflareSpeedTest));
 
-// Fallback speed test endpoint (using HTTP requests)
+// Advanced speed test endpoint (continuous monitoring)
+router.post('/advanced', authenticateToken, asyncHandler(runAdvancedSpeedTest));
+
+// Fallback speed test endpoint (simple HTTP method)
 router.post('/fallback', authenticateToken, asyncHandler(runFallbackSpeedTest));
 
 export default router;
