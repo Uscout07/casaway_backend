@@ -79,11 +79,15 @@ export const runSpeedTest = async (req: Request, res: Response) => {
       const speedResult = await speedtest.getSpeed();
       console.log("Raw speed result:", speedResult);
       
+      // fast-speedtest-api returns bps, convert to Mbps
+      const speedInMbps = speedResult / 1000000;
+      console.log("Speed in Mbps:", speedInMbps);
+      
       // Check if the result is reasonable (between 0.1 and 10000 Mbps)
-      if (speedResult > 0.1 && speedResult < 10000) {
+      if (speedInMbps > 0.1 && speedInMbps < 10000) {
         // Result seems reasonable, use it
-        downloadSpeed = Math.round(speedResult * 100) / 100;
-        uploadSpeed = Math.round(speedResult * 100) / 100;
+        downloadSpeed = Math.round(speedInMbps * 100) / 100;
+        uploadSpeed = Math.round(speedInMbps * 100) / 100;
         console.log("Using fast-speedtest-api result:", { downloadSpeed, uploadSpeed });
       } else {
         // Result seems unreasonable, use fallback
