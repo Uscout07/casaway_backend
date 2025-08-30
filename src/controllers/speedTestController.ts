@@ -272,24 +272,18 @@ export const runCloudflareSpeedTest = async (req: Request, res: Response) => {
   }
 };
 
-// Main speed test endpoint - uses reliable HTTP method with calibration
+// Main speed test endpoint - uses advanced continuous monitoring
 export const speedTest = async (req: Request, res: Response) => {
   try {
-    // Use the reliable fallback method as primary (it's working well)
-    console.log('Using reliable HTTP speed test method...');
-    return await runFallbackSpeedTest(req, res);
+    // Use the advanced continuous monitoring method for better accuracy
+    console.log('Using advanced continuous monitoring speed test...');
+    return await runAdvancedSpeedTest(req, res);
   } catch (error: any) {
-    console.log('Primary speed test failed, trying advanced monitoring...');
-    try {
-      // Try advanced continuous monitoring method if primary fails
-      return await runAdvancedSpeedTest(req, res);
-    } catch (advancedError: any) {
-      console.error('All speed test methods failed:', advancedError);
-      res.status(500).json({ 
-        error: 'Speed test unavailable', 
-        message: advancedError?.message || 'Speed test is currently unavailable. Please check your internet connection and try again.' 
-      });
-    }
+    console.error('Advanced speed test failed:', error);
+    res.status(500).json({ 
+      error: 'Speed test unavailable', 
+      message: error?.message || 'Speed test is currently unavailable. Please check your internet connection and try again.' 
+    });
   }
 };
 
