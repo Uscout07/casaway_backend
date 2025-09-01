@@ -370,14 +370,37 @@ router.post('/request-password-change', authenticateToken, asyncHandler(async (r
     user.passwordResetExpires = tokenExpiry;
     await user.save();
 
-    // TODO: Send email with verification link
-    // For now, we'll just return the token (in production, send via email)
-    console.log('Password reset token:', verificationToken);
+    // Import email service
+    const emailService = require('../utils/emailService').emailService;
 
-    res.status(200).json({
-        msg: 'Password change request sent. Check your email for verification link.',
-        token: verificationToken // Remove this in production
-    });
+    try {
+        // Send password reset email
+        const emailSent = await emailService.sendPasswordResetEmail(
+            user.email,
+            user.username || user.name || 'User',
+            verificationToken
+        );
+
+        if (emailSent) {
+            res.status(200).json({
+                msg: 'Password change request sent. Check your email for verification link.',
+                emailSent: true
+            });
+        } else {
+            // If email fails, still allow the process but inform the user
+            res.status(200).json({
+                msg: 'Password change request created. Email delivery failed, but you can use the token below for testing.',
+                token: verificationToken, // Only for development/testing
+                emailSent: false
+            });
+        }
+    } catch (error) {
+        console.error('Error in password reset process:', error);
+        res.status(500).json({
+            msg: 'Failed to process password reset request. Please try again.',
+            emailSent: false
+        });
+    }
 }));
 
 // Change password with verification token
