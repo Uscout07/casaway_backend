@@ -307,6 +307,131 @@ router.get('/activity', authenticateToken, asyncHandler(async (req: Authenticate
     });
 }));
 
+// Change username (no verification required)
+router.patch('/change-username', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const userId = req.userId;
+    const { newUsername } = req.body;
+
+    if (!userId) {
+        res.status(401).json({ msg: 'User not authenticated.' });
+        return;
+    }
+
+    if (!newUsername || newUsername.trim().length < 3) {
+        res.status(400).json({ msg: 'Username must be at least 3 characters long.' });
+        return;
+    }
+
+    // Check if username is already taken
+    const existingUser = await User.findOne({ username: newUsername.trim() });
+    if (existingUser && existingUser._id.toString() !== userId) {
+        res.status(400).json({ msg: 'Username is already taken.' });
+        return;
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+        userId,
+        { username: newUsername.trim() },
+        { new: true }
+    ).select('-password');
+
+    if (!updatedUser) {
+        res.status(404).json({ msg: 'User not found.' });
+        return;
+    }
+
+    res.status(200).json({
+        msg: 'Username updated successfully',
+        user: updatedUser
+    });
+}));
+
+// Request password change (sends verification email)
+router.post('/request-password-change', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const userId = req.userId;
+
+    if (!userId) {
+        res.status(401).json({ msg: 'User not authenticated.' });
+        return;
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+        res.status(404).json({ msg: 'User not found.' });
+        return;
+    }
+
+    // Generate a verification token (valid for 1 hour)
+    const verificationToken = require('crypto').randomBytes(32).toString('hex');
+    const tokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    // Store the token in the user document
+    user.passwordResetToken = verificationToken;
+    user.passwordResetExpires = tokenExpiry;
+    await user.save();
+
+    // TODO: Send email with verification link
+    // For now, we'll just return the token (in production, send via email)
+    console.log('Password reset token:', verificationToken);
+
+    res.status(200).json({
+        msg: 'Password change request sent. Check your email for verification link.',
+        token: verificationToken // Remove this in production
+    });
+}));
+
+// Change password with verification token
+router.patch('/change-password', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const userId = req.userId;
+    const { verificationToken, newPassword } = req.body;
+
+    if (!userId) {
+        res.status(401).json({ msg: 'User not authenticated.' });
+        return;
+    }
+
+    if (!verificationToken || !newPassword) {
+        res.status(400).json({ msg: 'Verification token and new password are required.' });
+        return;
+    }
+
+    if (newPassword.length < 6) {
+        res.status(400).json({ msg: 'Password must be at least 6 characters long.' });
+        return;
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+        res.status(404).json({ msg: 'User not found.' });
+        return;
+    }
+
+    // Verify the token
+    if (user.passwordResetToken !== verificationToken) {
+        res.status(400).json({ msg: 'Invalid verification token.' });
+        return;
+    }
+
+    if (user.passwordResetExpires && user.passwordResetExpires < new Date()) {
+        res.status(400).json({ msg: 'Verification token has expired.' });
+        return;
+    }
+
+    // Hash the new password
+    const bcrypt = require('bcryptjs');
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password and clear reset token
+    user.password = hashedPassword;
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
+    await user.save();
+
+    res.status(200).json({
+        msg: 'Password changed successfully'
+    });
+}));
+
 // Delete user account
 router.delete('/delete', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const userId = req.userId;

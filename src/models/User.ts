@@ -29,6 +29,8 @@ export interface IUser extends Document {
   dream_countries: string[];
   dream_cities: string[];
   swap_dates: { start: Date; end: Date }[];
+  passwordResetToken?: string;
+  passwordResetExpires?: Date;
 }
 
 // User schema for MongoDB collection
@@ -75,6 +77,10 @@ const userSchema = new Schema<IUser>(
     dream_countries: [{ type: String }],
     dream_cities: [{ type: String }],
     swap_dates: [{ start: Date, end: Date }],
+
+    // Password reset fields
+    passwordResetToken: { type: String },
+    passwordResetExpires: { type: Date },
   },
   { timestamps: true } // Automatically manage createdAt and updatedAt
 );
