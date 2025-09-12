@@ -1,11 +1,13 @@
 import dotenv from 'dotenv';
-dotenv.config(); 
+dotenv.config();
+import passport from './config/passport'; 
 import express from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import authRoutes from './routes/auth.routes';
+import oauthRoutes from './routes/authRoutes';
 import userRoutes from './routes/userRoutes';
 import cookieParser from 'cookie-parser';
 import protectedRoutes from './routes/protected';
@@ -178,7 +180,10 @@ app.use(cookieParser());
 app.use(express.json({ limit: '50mb' })); // Increased limit to 50MB
 // If you also handle form data with URL-encoded payloads, you might want to increase that limit too:
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
-console.log('[BACKEND] Middleware: cookieParser and express.json (with 50MB limit) enabled.');
+
+// Initialize Passport
+app.use(passport.initialize());
+console.log('[BACKEND] Middleware: cookieParser, express.json (with 50MB limit), and passport initialized.');
 
 // app.use(bodyParser.json({ limit: '10mb' }));
 // app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
@@ -187,6 +192,7 @@ console.log('[BACKEND] Middleware: cookieParser and express.json (with 50MB limi
 // Routes
 app.use('/api/protected', protectedRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/oauth', oauthRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/message', messageRoutes);
 app.use('/api/listing', listingRoutes);

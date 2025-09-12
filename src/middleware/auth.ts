@@ -5,8 +5,9 @@ import User, { IUser } from "../models/User";
 
 declare global {
   namespace Express {
+    interface User extends IUser {}
     interface Request {
-      user?: IUser;
+      user?: User;
       userId?: string; // retained for backwards compatibility
     }
   }

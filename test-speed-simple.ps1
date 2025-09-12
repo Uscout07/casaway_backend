@@ -106,14 +106,14 @@ Write-Host "🏓 Testing Ping..." -ForegroundColor Yellow
 $pingHosts = @("8.8.8.8", "1.1.1.1", "google.com")
 $pingResults = @()
 
-foreach ($host in $pingHosts) {
+foreach ($pingHost in $pingHosts) {
     try {
-        Write-Host "   Testing: $host" -ForegroundColor Cyan
-        $ping = Test-Connection -ComputerName $host -Count 4 -Quiet
+        Write-Host "   Testing: $pingHost" -ForegroundColor Cyan
+        $ping = Test-Connection -ComputerName $pingHost -Count 4 -Quiet
         if ($ping) {
-            $pingTime = (Test-Connection -ComputerName $host -Count 1).ResponseTime
+            $pingTime = (Test-Connection -ComputerName $pingHost -Count 1).ResponseTime
             $result = @{
-                Host = $host
+                Host = $pingHost
                 Ping = $pingTime
                 Status = "Success"
             }
@@ -181,4 +181,5 @@ $finalResult = @{
 Write-Host ""
 Write-Host "📋 JSON Response:" -ForegroundColor Magenta
 $finalResult | ConvertTo-Json -Depth 10 | Write-Host -ForegroundColor Gray
+
 

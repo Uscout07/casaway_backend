@@ -31,6 +31,22 @@ export interface IUser extends Document {
   swap_dates: { start: Date; end: Date }[];
   passwordResetToken?: string;
   passwordResetExpires?: Date;
+  googleId?: string;
+  isGoogleUser?: boolean;
+  isEmailVerified?: boolean;
+  lastLogin?: Date;
+  pushToken?: string;
+  platform?: string;
+  
+  // Notification settings
+  pushNotifications?: boolean;
+  emailNotifications?: boolean;
+  smsNotifications?: boolean;
+  newMessages?: boolean;
+  newFollowers?: boolean;
+  appUpdates?: boolean;
+  weeklyDigest?: boolean;
+  securityAlerts?: boolean;
 }
 
 // User schema for MongoDB collection
@@ -40,7 +56,7 @@ const userSchema = new Schema<IUser>(
     name: { type: String, required: false },
     username: { type: String, required: true, unique: true }, // Unique username for login/profile
     email: { type: String, required: true, unique: true }, // Unique email for authentication
-    password: { type: String, required: true }, // Hashed password
+    password: { type: String, required: function() { return !this.isGoogleUser; } }, // Hashed password, not required for Google users
 
     // Profile details
     bio: { type: String, default: "" }, // User bio for profile page
@@ -81,6 +97,26 @@ const userSchema = new Schema<IUser>(
     // Password reset fields
     passwordResetToken: { type: String },
     passwordResetExpires: { type: Date },
+
+    // Google OAuth fields
+    googleId: { type: String, unique: true, sparse: true }, // sparse allows multiple null values
+    isGoogleUser: { type: Boolean, default: false },
+    isEmailVerified: { type: Boolean, default: false },
+    lastLogin: { type: Date },
+
+    // Push notification fields
+    pushToken: { type: String },
+    platform: { type: String },
+    
+    // Notification settings
+    pushNotifications: { type: Boolean, default: true },
+    emailNotifications: { type: Boolean, default: true },
+    smsNotifications: { type: Boolean, default: false },
+    newMessages: { type: Boolean, default: true },
+    newFollowers: { type: Boolean, default: false },
+    appUpdates: { type: Boolean, default: true },
+    weeklyDigest: { type: Boolean, default: false },
+    securityAlerts: { type: Boolean, default: true },
   },
   { timestamps: true } // Automatically manage createdAt and updatedAt
 );

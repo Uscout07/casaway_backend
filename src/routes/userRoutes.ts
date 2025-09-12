@@ -488,6 +488,124 @@ router.delete('/delete', authenticateToken, asyncHandler(async (req: Authenticat
     res.status(200).json({ message: 'User and associated data deleted successfully.' });
 }));
 
+// Register push token for notifications
+router.post('/register-push-token', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    console.log('=== /register-push-token endpoint hit ===');
+    console.log('UserId from middleware:', req.userId);
+    console.log('Request body:', req.body);
 
+    if (!req.userId) {
+        console.error('No userId found in request after auth middleware');
+        res.status(401).json({ msg: 'Authentication failed - no user ID' });
+        return;
+    }
+
+    const { pushToken, platform } = req.body;
+
+    if (!pushToken) {
+        res.status(400).json({ msg: 'Push token is required' });
+        return;
+    }
+
+    try {
+        const user = await User.findById(req.userId);
+        if (!user) {
+            res.status(404).json({ msg: 'User not found' });
+            return;
+        }
+
+        // Update user with push token and platform
+        user.pushToken = pushToken;
+        user.platform = platform || 'unknown';
+        await user.save();
+
+        console.log(`Push token registered for user ${req.userId}`);
+        res.status(200).json({ 
+            msg: 'Push token registered successfully',
+            pushToken: pushToken,
+            platform: platform 
+        });
+    } catch (error) {
+        logError('Error registering push token:', error);
+        res.status(500).json({ msg: 'Server error while registering push token' });
+    }
+}));
+
+// Get notification settings
+router.get('/notification-settings', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    console.log('=== /notification-settings GET endpoint hit ===');
+    
+    if (!req.userId) {
+        res.status(401).json({ msg: 'Authentication failed - no user ID' });
+        return;
+    }
+
+    try {
+        const user = await User.findById(req.userId);
+        if (!user) {
+            res.status(404).json({ msg: 'User not found' });
+            return;
+        }
+
+        // Return notification settings (default values if not set)
+        const settings = {
+            pushNotifications: user.pushNotifications ?? true,
+            emailNotifications: user.emailNotifications ?? true,
+            smsNotifications: user.smsNotifications ?? false,
+            newMessages: user.newMessages ?? true,
+            newFollowers: user.newFollowers ?? false,
+            appUpdates: user.appUpdates ?? true,
+            weeklyDigest: user.weeklyDigest ?? false,
+            securityAlerts: user.securityAlerts ?? true,
+        };
+
+        res.status(200).json(settings);
+    } catch (error) {
+        logError('Error fetching notification settings:', error);
+        res.status(500).json({ msg: 'Server error while fetching notification settings' });
+    }
+}));
+
+// Update notification settings
+router.patch('/notification-settings', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    console.log('=== /notification-settings PATCH endpoint hit ===');
+    console.log('Request body:', req.body);
+    
+    if (!req.userId) {
+        res.status(401).json({ msg: 'Authentication failed - no user ID' });
+        return;
+    }
+
+    try {
+        const user = await User.findById(req.userId);
+        if (!user) {
+            res.status(404).json({ msg: 'User not found' });
+            return;
+        }
+
+        // Update notification settings
+        const allowedSettings = [
+            'pushNotifications', 'emailNotifications', 'smsNotifications',
+            'newMessages', 'newFollowers', 'appUpdates', 'weeklyDigest', 'securityAlerts'
+        ];
+
+        for (const setting of allowedSettings) {
+            if (req.body[setting] !== undefined) {
+                (user as any)[setting] = req.body[setting];
+            }
+        }
+
+        await user.save();
+
+        console.log(`Notification settings updated for user ${req.userId}`);
+        res.status(200).json({ 
+            msg: 'Notification settings updated successfully',
+            settings: req.body
+        });
+    } catch (error) {
+        logError('Error updating notification settings:', error);
+        res.status(500).json({ msg: 'Server error while updating notification settings' });
+    }
+}));
 
 export default router;

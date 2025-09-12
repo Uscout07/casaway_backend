@@ -315,6 +315,23 @@ router.patch('/:id', authenticateToken, upload.array('images', 10), asyncHandler
         newImageUrls = await Promise.all(files.map(file => uploadToS3(file)));
     }
 
+    // Optional: remove selected existing images (client sends removeImageUrls[])
+    const removeImageUrlsRaw = (req.body as any).removeImageUrls;
+    if (removeImageUrlsRaw) {
+        const urlsToRemove: string[] = Array.isArray(removeImageUrlsRaw)
+            ? removeImageUrlsRaw
+            : [removeImageUrlsRaw];
+        if (Array.isArray(urlsToRemove) && urlsToRemove.length > 0) {
+            const toRemoveSet = new Set<string>(urlsToRemove);
+            const beforeCount = listing.images.length;
+            listing.images = listing.images.filter((url: string) => !toRemoveSet.has(url));
+            // If thumbnail was removed, select a new one if available
+            if (listing.thumbnail && toRemoveSet.has(listing.thumbnail)) {
+                listing.thumbnail = (listing.images[0] as string) || '';
+            }
+        }
+    }
+
     // Update listing fields from req.body
     const updates = req.body;
     const allowedUpdates = [
