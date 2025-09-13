@@ -37,7 +37,8 @@
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "socket.io": "^4.8.1",
-    "socket.io-client": "^4.8.1"
+    "socket.io-client": "^4.8.1",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@types/axios": "^0.9.36",
@@ -51,6 +52,7 @@
     "@types/node": "^22.15.30",
     "@types/nodemailer": "^6.4.17",
     "@types/supertest": "^6.0.2",
+    "@types/ws": "^8.18.1",
     "jest": "^29.7.0",
     "nodemon": "^3.1.10",
     "supertest": "^7.0.0",

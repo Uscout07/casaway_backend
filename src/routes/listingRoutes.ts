@@ -87,6 +87,15 @@ router.post('/', authenticateToken, upload.array('images', 10), asyncHandler(asy
         // NEW: wifiSpeed from request body
         wifiSpeed
     } = req.body;
+
+    // Parse JSON strings from FormData
+    const parsedAmenities = typeof amenities === 'string' ? JSON.parse(amenities) : amenities;
+    const parsedFeatures = typeof features === 'string' ? JSON.parse(features) : features;
+    const parsedTags = typeof tags === 'string' ? JSON.parse(tags) : tags;
+    const parsedAvailability = typeof availability === 'string' ? JSON.parse(availability) : availability;
+    const parsedRoommates = typeof roommates === 'string' ? JSON.parse(roommates) : roommates;
+    const parsedPetTypes = typeof petTypes === 'string' ? JSON.parse(petTypes) : petTypes;
+    const parsedWifiSpeed = typeof wifiSpeed === 'string' ? JSON.parse(wifiSpeed) : wifiSpeed;
     const userId = req.userId; // Assuming authenticateToken sets req.userId
 
     // Basic validation
@@ -103,8 +112,8 @@ router.post('/', authenticateToken, upload.array('images', 10), asyncHandler(asy
     const imageUrls = await Promise.all(files.map(file => uploadToS3(file)));
 
     // --- Correctly format availability array for Mongoose ---
-    const formattedAvailability = Array.isArray(availability)
-        ? availability.map((dateString: string) => {
+    const formattedAvailability = Array.isArray(parsedAvailability)
+        ? parsedAvailability.map((dateString: string) => {
             // Ensure dateString is valid before creating Date object
             const date = new Date(dateString);
             if (isNaN(date.getTime())) {
@@ -136,18 +145,18 @@ router.post('/', authenticateToken, upload.array('images', 10), asyncHandler(asy
         title,
         details,
         type,
-        amenities: amenities || [], // Ensure defaults for optional arrays
-        features: features || [],
+        amenities: parsedAmenities || [], // Use parsed data
+        features: parsedFeatures || [],
         city,
         country,
-        roommates: roommates || [],
-        tags: tags || [],
+        roommates: parsedRoommates || [],
+        tags: parsedTags || [],
         availability: formattedAvailability, // <--- This is the crucial fix
         images: imageUrls,
-        thumbnail: imageUrls[0],
+        thumbnail: thumbnail && !isNaN(parseInt(thumbnail)) ? imageUrls[parseInt(thumbnail)] || imageUrls[0] : imageUrls[0],
         status,
-        petTypes: petTypes || [],
-        wifiSpeed: wifiSpeed || { download: 0, upload: 0 }, // NEW: Save Wi-Fi speed with defaults
+        petTypes: parsedPetTypes || [],
+        wifiSpeed: parsedWifiSpeed || { download: 0, upload: 0 }, // Use parsed data
     });
 
     res.status(201).json(newListing); // Send response once after successful creation

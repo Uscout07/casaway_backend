@@ -363,5 +363,150 @@ router.get('/likes/:commentId', asyncHandler(async (req: Request, res: Response)
     }
 }));
 
+// Get all comments by a specific user
+router.get('/user/:userId', authenticateToken, asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const { userId } = req.params;
+    const requestingUserId = req.userId;
+
+    if (!requestingUserId) {
+        res.status(401).json({ msg: 'User not authenticated' });
+        return;
+    }
+
+    // Users can only view their own comments
+    if (requestingUserId !== userId) {
+        res.status(403).json({ msg: 'Access denied. You can only view your own comments.' });
+        return;
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+        res.status(400).json({ msg: 'Invalid user ID' });
+        return;
+    }
+
+    try {
+        const comments = await Comment.find({ user: userId })
+            .populate('post', 'caption imageUrl user createdAt')
+            .populate('listing', 'title images user createdAt')
+            .populate({
+                path: 'post',
+                populate: {
+                    path: 'user',
+                    select: 'name username profilePic'
+                }
+            })
+            .populate({
+                path: 'listing',
+                populate: {
+                    path: 'user',
+                    select: 'name username profilePic'
+                }
+            })
+            .sort({ createdAt: -1 });
+
+        res.json(comments);
+    } catch (error) {
+        console.error('Error fetching user comments:', error);
+        res.status(500).json({ msg: 'Server error' });
+    }
+}));
+
+// Delete a specific comment by ID
+router.delete('/:commentId', authenticateToken, asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const { commentId } = req.params;
+    const userId = req.userId;
+
+    if (!userId) {
+        res.status(401).json({ msg: 'User not authenticated' });
+        return;
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(commentId)) {
+        res.status(400).json({ msg: 'Invalid comment ID' });
+        return;
+    }
+
+    try {
+        const comment = await Comment.findById(commentId);
+        if (!comment) {
+            res.status(404).json({ msg: 'Comment not found' });
+            return;
+        }
+
+        // Check if the user owns this comment
+        if (comment.user.toString() !== userId) {
+            res.status(403).json({ msg: 'Access denied. You can only delete your own comments.' });
+            return;
+        }
+
+        await Comment.findByIdAndDelete(commentId);
+        res.json({ msg: 'Comment deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting comment:', error);
+        res.status(500).json({ msg: 'Server error' });
+    }
+}));
+
+// Get comments on user's own posts and listings
+router.get('/on-user-content/:userId', authenticateToken, asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const { userId } = req.params;
+    const requestingUserId = req.userId;
+
+    if (!requestingUserId) {
+        res.status(401).json({ msg: 'User not authenticated' });
+        return;
+    }
+
+    // Users can only view comments on their own content
+    if (requestingUserId !== userId) {
+        res.status(403).json({ msg: 'Access denied. You can only view comments on your own content.' });
+        return;
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+        res.status(400).json({ msg: 'Invalid user ID' });
+        return;
+    }
+
+    try {
+        // Find all posts and listings by the user
+        const userPosts = await Post.find({ user: userId }).select('_id');
+        const userListings = await Listing.find({ user: userId }).select('_id');
+
+        const postIds = userPosts.map(post => post._id);
+        const listingIds = userListings.map(listing => listing._id);
+
+        // Find comments on user's posts and listings
+        const comments = await Comment.find({
+            $or: [
+                { post: { $in: postIds } },
+                { listing: { $in: listingIds } }
+            ]
+        })
+        .populate('user', 'name username profilePic')
+        .populate('post', 'caption imageUrl user createdAt')
+        .populate('listing', 'title images user createdAt')
+        .populate({
+            path: 'post',
+            populate: {
+                path: 'user',
+                select: 'name username profilePic'
+            }
+        })
+        .populate({
+            path: 'listing',
+            populate: {
+                path: 'user',
+                select: 'name username profilePic'
+            }
+        })
+        .sort({ createdAt: -1 });
+
+        res.json(comments);
+    } catch (error) {
+        console.error('Error fetching comments on user content:', error);
+        res.status(500).json({ msg: 'Server error' });
+    }
+}));
 
 export default router;

@@ -346,7 +346,7 @@ router.patch('/change-username', authenticateToken, asyncHandler(async (req: Aut
     });
 }));
 
-// Request password change (sends verification email)
+// Request password change (sends verification code via email)
 router.post('/request-password-change', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const userId = req.userId;
 
@@ -361,36 +361,42 @@ router.post('/request-password-change', authenticateToken, asyncHandler(async (r
         return;
     }
 
-    // Generate a verification token (valid for 1 hour)
-    const verificationToken = require('crypto').randomBytes(32).toString('hex');
-    const tokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    // Check if user has a password (not OAuth user)
+    if (!user.password) {
+        res.status(400).json({ msg: 'Password change not available for OAuth users.' });
+        return;
+    }
 
-    // Store the token in the user document
-    user.passwordResetToken = verificationToken;
-    user.passwordResetExpires = tokenExpiry;
+    // Generate a 6-digit verification code
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const codeExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+    // Store the code in the user document
+    user.passwordResetToken = verificationCode;
+    user.passwordResetExpires = codeExpiry;
     await user.save();
 
     // Import email service
     const emailService = require('../utils/emailService').emailService;
 
     try {
-        // Send password reset email
-        const emailSent = await emailService.sendPasswordResetEmail(
+        // Send password reset email with code
+        const emailSent = await emailService.sendPasswordResetCode(
             user.email,
             user.username || user.name || 'User',
-            verificationToken
+            verificationCode
         );
 
         if (emailSent) {
             res.status(200).json({
-                msg: 'Password change request sent. Check your email for verification link.',
+                msg: 'Verification code sent to your email. Please check your inbox.',
                 emailSent: true
             });
         } else {
             // If email fails, still allow the process but inform the user
             res.status(200).json({
-                msg: 'Password change request created. Email delivery failed, but you can use the token below for testing.',
-                token: verificationToken, // Only for development/testing
+                msg: 'Verification code generated. Email delivery failed, but you can use the code below for testing.',
+                code: verificationCode, // Only for development/testing
                 emailSent: false
             });
         }
@@ -403,18 +409,18 @@ router.post('/request-password-change', authenticateToken, asyncHandler(async (r
     }
 }));
 
-// Change password with verification token
+// Change password with current password verification
 router.patch('/change-password', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const userId = req.userId;
-    const { verificationToken, newPassword } = req.body;
+    const { currentPassword, newPassword } = req.body;
 
     if (!userId) {
         res.status(401).json({ msg: 'User not authenticated.' });
         return;
     }
 
-    if (!verificationToken || !newPassword) {
-        res.status(400).json({ msg: 'Verification token and new password are required.' });
+    if (!currentPassword || !newPassword) {
+        res.status(400).json({ msg: 'Current password and new password are required.' });
         return;
     }
 
@@ -429,14 +435,66 @@ router.patch('/change-password', authenticateToken, asyncHandler(async (req: Aut
         return;
     }
 
-    // Verify the token
-    if (user.passwordResetToken !== verificationToken) {
-        res.status(400).json({ msg: 'Invalid verification token.' });
+    // Check if user has a password (not OAuth user)
+    if (!user.password) {
+        res.status(400).json({ msg: 'Password change not available for OAuth users.' });
+        return;
+    }
+
+    // Verify current password
+    const bcrypt = require('bcryptjs');
+    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isCurrentPasswordValid) {
+        res.status(400).json({ msg: 'Current password is incorrect.' });
+        return;
+    }
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password
+    user.password = hashedPassword;
+    await user.save();
+
+    res.status(200).json({
+        msg: 'Password changed successfully'
+    });
+}));
+
+// Change password with verification code (for password reset flow)
+router.patch('/reset-password', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const userId = req.userId;
+    const { verificationCode, newPassword } = req.body;
+
+    if (!userId) {
+        res.status(401).json({ msg: 'User not authenticated.' });
+        return;
+    }
+
+    if (!verificationCode || !newPassword) {
+        res.status(400).json({ msg: 'Verification code and new password are required.' });
+        return;
+    }
+
+    if (newPassword.length < 6) {
+        res.status(400).json({ msg: 'Password must be at least 6 characters long.' });
+        return;
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+        res.status(404).json({ msg: 'User not found.' });
+        return;
+    }
+
+    // Verify the code
+    if (user.passwordResetToken !== verificationCode) {
+        res.status(400).json({ msg: 'Invalid verification code.' });
         return;
     }
 
     if (user.passwordResetExpires && user.passwordResetExpires < new Date()) {
-        res.status(400).json({ msg: 'Verification token has expired.' });
+        res.status(400).json({ msg: 'Verification code has expired. Please request a new one.' });
         return;
     }
 
@@ -444,7 +502,7 @@ router.patch('/change-password', authenticateToken, asyncHandler(async (req: Aut
     const bcrypt = require('bcryptjs');
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    // Update password and clear reset token
+    // Update password and clear reset code
     user.password = hashedPassword;
     user.passwordResetToken = undefined;
     user.passwordResetExpires = undefined;

@@ -26,7 +26,7 @@ import rewardRoutes from './routes/rewardRoutes';
 import notificationRoutes from "./routes/notificationRoutes";
 import prelaunchRoutes from './routes/prelaunch.routes';
 import locationRoutes from './routes/locationRoutes'; // Import location routes
-import speedTestRoutes from './routes/speedTest'; // Import speed test routes
+import speedTestRoutes from './routes/speedTest.routes'; // Import speed test routes
 
 
 
@@ -210,6 +210,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/prelaunch', prelaunchRoutes);
 app.use('/api/locations', locationRoutes); // Use the new location routes
 app.use('/api/speedtest', speedTestRoutes); // Add speed test route
+console.log('[BACKEND] Speed test routes mounted at /api/speedtest');
 
 console.log('[BACKEND] All API routes mounted.');
 

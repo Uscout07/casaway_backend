@@ -5,8 +5,8 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User';
 
 export const registerUser = async (req: Request, res: Response) => {
-    const { name, username, email, password, inviteToken } = req.body;
-    console.log("[AUTH_CONTROLLER] Register attempt for:", { email, username, name, inviteToken });
+    const { name, username, email, password, inviteToken, referralCode } = req.body;
+    console.log("[AUTH_CONTROLLER] Register attempt for:", { email, username, name, inviteToken, referralCode });
 
     if (!username || !email || !password) {
         return res.status(400).json({
@@ -49,6 +49,17 @@ export const registerUser = async (req: Request, res: Response) => {
         // Hash password
         const hashedPassword = await bcrypt.hash(password, 10);
 
+        // Generate unique referral code for the new user
+        let userReferralCode = username.toLowerCase();
+        let referralCodeExists = await User.findOne({ referralCode: userReferralCode });
+        let counter = 1;
+        
+        while (referralCodeExists) {
+            userReferralCode = `${username.toLowerCase()}${counter}`;
+            referralCodeExists = await User.findOne({ referralCode: userReferralCode });
+            counter++;
+        }
+
         // Create user with overridden role
         const user = await User.create({
             name,
@@ -56,10 +67,33 @@ export const registerUser = async (req: Request, res: Response) => {
             email,
             password: hashedPassword,
             role,  // ← sets to "ambassador" if inviteToken valid
-            referralCode: username.toLowerCase()
+            referralCode: userReferralCode,
+            points: 0
         });
 
         console.log("[AUTH_CONTROLLER] User created in DB:", user.email);
+
+        // Handle referral code if provided
+        if (referralCode && typeof referralCode === 'string') {
+            try {
+                const referrer = await User.findOne({ referralCode: referralCode });
+                
+                if (referrer && referrer._id.toString() !== user._id.toString()) {
+                    // Apply referral
+                    user.referredBy = referralCode;
+                    user.points = 5; // Bonus points for being referred
+                    referrer.points = (referrer.points || 0) + 10; // Bonus points for referring
+                    
+                    await user.save();
+                    await referrer.save();
+                    
+                    console.log(`Referral applied: ${referrer.username} referred ${user.username}`);
+                }
+            } catch (referralError) {
+                console.error('Error applying referral code:', referralError);
+                // Don't fail the registration process if referral fails
+            }
+        }
 
         // Sign JWT
         const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {

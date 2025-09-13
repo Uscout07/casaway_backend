@@ -9,10 +9,27 @@ const router = express.Router();
 // Google OAuth routes (stateless: no server-side sessions)
 router.get(
   '/google',
-  passport.authenticate('google', {
-    scope: ['profile', 'email'],
-    session: false,
-  })
+  (req, res, next) => {
+    // Extract referral code and invite token from query parameters
+    const referralCode = req.query.ref;
+    const inviteToken = req.query.inviteToken;
+    
+    // Build state parameter with both referral code and invite token
+    let state = undefined;
+    if (referralCode || inviteToken) {
+      const stateObj: any = {};
+      if (typeof referralCode === 'string') stateObj.ref = referralCode;
+      if (typeof inviteToken === 'string') stateObj.inviteToken = inviteToken;
+      state = JSON.stringify(stateObj);
+    }
+    
+    // Pass state parameter to Google OAuth
+    passport.authenticate('google', {
+      scope: ['profile', 'email'],
+      session: false,
+      state: state
+    })(req, res, next);
+  }
 );
 
 router.get(

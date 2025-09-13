@@ -196,4 +196,52 @@ router.get('/status/:userId', authenticateToken, asyncHandler(async (req: Reques
     }
 }));
 
+// Remove a follower (for profile owners)
+router.post('/remove-follower/:userId', authenticateToken, asyncHandler(async (req: Request, res: Response) => {
+    const currentUserId = req.userId;
+    const followerUserId = req.params.userId;
+
+    if (!currentUserId) {
+        res.status(401).json({ msg: 'Unauthorized' });
+        return;
+    }
+
+    if (currentUserId === followerUserId) {
+        res.status(400).json({ msg: "You can't remove yourself" });
+        return;
+    }
+
+    try {
+        const currentUser = await User.findById(currentUserId) as (IUser & mongoose.Document) | null;
+        const followerUser = await User.findById(followerUserId) as (IUser & mongoose.Document) | null;
+
+        if (!currentUser) {
+            res.status(404).json({ msg: 'Current user not found' });
+            return;
+        }
+
+        if (!followerUser) {
+            res.status(404).json({ msg: 'Follower user not found' });
+            return;
+        }
+
+        // Remove follower from current user's followers list
+        currentUser.followers = currentUser.followers.filter(id => id.toString() !== followerUserId);
+        
+        // Remove current user from follower's following list
+        followerUser.following = followerUser.following.filter(id => id.toString() !== currentUserId);
+
+        await currentUser.save();
+        await followerUser.save();
+
+        res.json({
+            msg: 'Follower removed successfully',
+            followersCount: currentUser.followers.length
+        });
+    } catch (err) {
+        console.error('[POST /remove-follower error]', err);
+        res.status(500).json({ msg: 'Server error', error: getErrorMessage(err) });
+    }
+}));
+
 export default router;

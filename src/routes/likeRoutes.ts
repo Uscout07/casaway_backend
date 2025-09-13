@@ -250,4 +250,89 @@ router.get('/status/comment/:commentId', authenticateToken, asyncHandler(async (
     res.json({ isLiked: !!isLiked });
 }));
 
+// Get all likes by a specific user
+router.get('/user/:userId', authenticateToken, asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const { userId } = req.params;
+    const requestingUserId = req.userId;
+
+    if (!requestingUserId) {
+        res.status(401).json({ msg: 'User not authenticated' });
+        return;
+    }
+
+    // Users can only view their own likes
+    if (requestingUserId !== userId) {
+        res.status(403).json({ msg: 'Access denied. You can only view your own likes.' });
+        return;
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+        res.status(400).json({ msg: 'Invalid user ID' });
+        return;
+    }
+
+    try {
+        const likes = await Like.find({ user: userId })
+            .populate('post', 'caption imageUrl user createdAt')
+            .populate('listing', 'title images user createdAt')
+            .populate('comment', 'text createdAt')
+            .populate({
+                path: 'post',
+                populate: {
+                    path: 'user',
+                    select: 'name username profilePic'
+                }
+            })
+            .populate({
+                path: 'listing',
+                populate: {
+                    path: 'user',
+                    select: 'name username profilePic'
+                }
+            })
+            .sort({ createdAt: -1 });
+
+        res.json(likes);
+    } catch (error) {
+        console.error('Error fetching user likes:', error);
+        res.status(500).json({ msg: 'Server error' });
+    }
+}));
+
+// Delete a specific like by ID
+router.delete('/:likeId', authenticateToken, asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const { likeId } = req.params;
+    const userId = req.userId;
+
+    if (!userId) {
+        res.status(401).json({ msg: 'User not authenticated' });
+        return;
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(likeId)) {
+        res.status(400).json({ msg: 'Invalid like ID' });
+        return;
+    }
+
+    try {
+        const like = await Like.findById(likeId);
+        if (!like) {
+            res.status(404).json({ msg: 'Like not found' });
+            return;
+        }
+
+        // Check if the user owns this like
+        if (like.user.toString() !== userId) {
+            res.status(403).json({ msg: 'Access denied. You can only delete your own likes.' });
+            return;
+        }
+
+        await Like.findByIdAndDelete(likeId);
+        res.json({ msg: 'Like removed successfully' });
+    } catch (error) {
+        console.error('Error deleting like:', error);
+        res.status(500).json({ msg: 'Server error' });
+    }
+}));
+
 export default router;
