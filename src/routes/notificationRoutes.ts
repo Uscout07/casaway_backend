@@ -17,6 +17,25 @@ declare module 'express-serve-static-core' {
     }
 }
 
+// GET unread notification count for the authenticated user
+router.get('/unread-count', authenticateToken, asyncHandler(async (req: Request, res: Response) => {
+    try {
+        if (!req.userId) {
+            res.status(401).json({ message: 'User not authenticated' });
+            return;
+        }
+
+        const count = await Notification.countDocuments({ 
+            recipient: req.userId, 
+            read: false 
+        });
+
+        res.json({ count });
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching unread count' });
+    }
+}));
+
 // GET all notifications for the authenticated user
 router.get('/', authenticateToken, asyncHandler(async (req: Request, res: Response) => {
     try {

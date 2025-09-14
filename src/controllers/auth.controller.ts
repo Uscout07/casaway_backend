@@ -147,11 +147,15 @@ export const registerUser = async (req: Request, res: Response) => {
 };
 
 export const loginUser = async (req: Request, res: Response) => {
-    const { email, password } = req.body;
-    console.log('[AUTH_CONTROLLER] Login attempt for:', { email });
+    const { email, username, password } = req.body;
+    console.log('[AUTH_CONTROLLER] Login attempt for:', { email, username });
 
-    if (!email || !password) {
-        return res.status(400).json({ msg: 'Please enter all fields (email, password)' });
+    if (!password) {
+        return res.status(400).json({ msg: 'Password is required' });
+    }
+
+    if (!email && !username) {
+        return res.status(400).json({ msg: 'Please enter either email or username' });
     }
 
     if (!process.env.JWT_SECRET) {
@@ -159,7 +163,14 @@ export const loginUser = async (req: Request, res: Response) => {
     }
 
     try {
-        const user = await User.findOne({ email });
+        // Find user by email or username
+        let user;
+        if (email) {
+            user = await User.findOne({ email });
+        } else {
+            user = await User.findOne({ username });
+        }
+        
         if (!user) {
             return res.status(400).json({ msg: 'Invalid credentials' });
         }
